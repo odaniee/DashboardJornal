@@ -38,7 +38,7 @@
       <div class="card h-100 shadow-sm">
         <div class="card-body">
           <h2 class="h5">Nova ficha</h2>
-          <form method="post" action="{{ url_for('create_student') }}">
+          <form method="post" action="{{ url_for('create_student') }}" enctype="multipart/form-data">
             <div class="mb-3">
               <label class="form-label" for="name">Nome</label>
               <input class="form-control" id="name" name="name" required>
@@ -46,6 +46,10 @@
             <div class="mb-3">
               <label class="form-label" for="role">Função no jornal</label>
               <input class="form-control" id="role" name="role" placeholder="Repórter, editor, revisor...">
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="photo">Foto</label>
+              <input class="form-control" type="file" id="photo" name="photo" accept="image/*">
             </div>
             <div class="mb-3">
               <label class="form-label" for="contact">Contato</label>
@@ -73,10 +77,15 @@
             <div class="card participant-card flex-grow-1">
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start">
-                  <div>
+                  <div class="d-flex gap-3">
+                    {% if student.photo %}
+                      <img src="{{ url_for('employee_photo', filename=student.photo) }}" alt="Foto" class="rounded" style="width:64px; height:64px; object-fit:cover;">
+                    {% endif %}
+                    <div>
                     <h3 class="h6 mb-1">{{ student.name }}</h3>
                     <p class="mb-1 text-muted">{{ student.role or 'Função não informada' }}</p>
                     <p class="mb-1 small">{{ student.contact }}</p>
+                    </div>
                   </div>
                   <span class="badge {% if student.portal_enabled %}bg-success{% else %}bg-secondary{% endif %}">
                     {% if student.portal_enabled %}Portal liberado{% else %}Portal bloqueado{% endif %}
@@ -88,6 +97,9 @@
                     <button class="btn btn-sm btn-outline-primary" type="submit">
                       {% if student.portal_enabled %}Bloquear{% else %}Liberar{% endif %}
                     </button>
+                  </form>
+                  <form method="post" action="{{ url_for('delete_student', student_id=student.id) }}" onsubmit="return confirm('Remover este funcionário?');">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
                   </form>
                   <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">Imprimir ficha</button>
                 </div>
@@ -160,6 +172,9 @@
                     <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_journal', filename=journal.file) }}">PDF</a>
                   {% endif %}
                   <span class="badge bg-secondary ms-2">Criado em {{ journal.created_at[:10] }}</span>
+                  <form class="mt-2" method="post" action="{{ url_for('delete_journal', journal_id=journal.id) }}" onsubmit="return confirm('Excluir este jornal?');">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                  </form>
                 </div>
               </div>
             </div>
@@ -217,7 +232,12 @@
                 <div class="small text-muted">{{ asset.uploaded_at[:10] }} · {{ asset.notes or 'Sem notas' }}</div>
                 <div class="small">Departamento: {{ (departments | selectattr('id','equalto', asset.department_id) | first).name if asset.department_id else '—' }}</div>
               </div>
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_asset', filename=asset.stored_name) }}">Baixar</a>
+              <div class="d-flex flex-column gap-2 align-items-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_asset', filename=asset.stored_name) }}">Baixar</a>
+                <form method="post" action="{{ url_for('delete_asset', asset_id=asset.id) }}" onsubmit="return confirm('Remover este arquivo?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                </form>
+              </div>
             </div>
             {% else %}
             <p class="text-muted">Nenhum arquivo departamental.</p>
@@ -236,7 +256,12 @@
                 <div class="small text-muted">{{ asset.uploaded_at[:10] }}</div>
                 <div class="small">{{ asset.notes }}</div>
               </div>
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_asset', filename=asset.stored_name) }}">Baixar</a>
+              <div class="d-flex flex-column gap-2 align-items-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_asset', filename=asset.stored_name) }}">Baixar</a>
+                <form method="post" action="{{ url_for('delete_asset', asset_id=asset.id) }}" onsubmit="return confirm('Remover este arquivo?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                </form>
+              </div>
             </div>
             {% else %}
             <p class="text-muted">Nenhum arquivo enviado.</p>
@@ -391,6 +416,9 @@
                   <div class="small text-muted">{{ event.date }}</div>
                   <div class="small">{{ event.description }}</div>
                 </div>
+                <form method="post" action="{{ url_for('delete_calendar_event', event_id=event.id) }}" onsubmit="return confirm('Excluir este evento?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                </form>
               </div>
             </li>
             {% else %}
@@ -411,6 +439,9 @@
                   <div class="small text-muted">{{ event.date }} · {{ (departments | selectattr('id','equalto', event.department_id) | first).name if event.department_id else 'Sem dept.' }}</div>
                   <div class="small">{{ event.description }}</div>
                 </div>
+                <form method="post" action="{{ url_for('delete_calendar_event', event_id=event.id) }}" onsubmit="return confirm('Excluir este evento?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                </form>
               </div>
             </li>
             {% else %}
@@ -655,7 +686,12 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
           <h2 class="h5">Configurações visuais</h2>
-          <form method="post" action="{{ url_for('update_settings') }}">
+          <form method="post" action="{{ url_for('update_settings') }}" enctype="multipart/form-data">
+            <div class="mb-3">
+              <label class="form-label" for="logo_file">Logo (upload)</label>
+              <input class="form-control" type="file" id="logo_file" name="logo_file" accept="image/*">
+              <p class="form-text">Imagens PNG ou JPG. Você também pode informar um URL opcional abaixo.</p>
+            </div>
             <div class="mb-3">
               <label class="form-label" for="logo_url">Logo (URL)</label>
               <input class="form-control" id="logo_url" name="logo_url" value="{{ site_settings.logo_url }}" placeholder="https://...">
