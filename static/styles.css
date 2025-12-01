@@ -1,0 +1,50 @@
+body {
+  background-color: #f6f7fb;
+}
+
+.participant-card {
+  min-width: 280px;
+  max-width: 360px;
+}
+
+.timeline {
+  position: relative;
+  margin-left: 1rem;
+  padding-left: 1.5rem;
+}
+
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 0.25rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #0d6efd;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: -0.5rem;
+  top: 0.35rem;
+  width: 10px;
+  height: 10px;
+  background: #0d6efd;
+  border-radius: 50%;
+}
+
+.timeline-date {
+  font-weight: 600;
+}
+
+@media print {
+  .navbar, .nav, .btn, .alert { display: none !important; }
+  body { background: #fff; }
+  .card { box-shadow: none; }
+}

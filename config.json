@@ -1,0 +1,8 @@
+{
+  "protocol": "http",
+  "host": "localhost",
+  "port": 5000,
+  "admin_users": [
+    { "username": "admin", "password": "admin123" }
+  ]
+}
