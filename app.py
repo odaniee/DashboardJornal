@@ -58,7 +58,7 @@ def login_required(view):
     @wraps(view)
     def wrapped_view(**kwargs):
         if not session.get("user"):
-            flash("Entre com um usuário habilitado para continuar", "warning")
+            flash("Entre com um usuário administrador para continuar", "warning")
             return redirect(url_for("login"))
         return view(**kwargs)
 
