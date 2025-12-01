@@ -65,6 +65,16 @@ body {
   border-radius: 12px;
 }
 
+.widget-card {
+  border: 1px solid #edf0f4;
+  background: radial-gradient(circle at 10% 20%, rgba(13, 110, 253, 0.08), transparent 40%),
+    #ffffff;
+}
+
+.widget-card .card-body {
+  min-height: 150px;
+}
+
 .card .card-body h2 {
   font-weight: 700;
 }

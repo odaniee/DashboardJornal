@@ -18,6 +18,22 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB hard limit to avoid abuse
+ALLOWED_JOURNAL_EXTENSIONS = {"pdf"}
+ALLOWED_ASSET_EXTENSIONS = {
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "doc",
+    "docx",
+    "txt",
+    "zip",
+    "csv",
+    "ppt",
+    "pptx",
+}
 
 
 def load_config():
@@ -68,11 +84,18 @@ def require_permission(permission):
     return decorator
 
 
+def allowed_file(filename, allowed_extensions):
+    if not filename or "." not in filename:
+        return False
+    return filename.rsplit(".", 1)[1].lower() in allowed_extensions
+
+
 config = load_config()
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret-key")
 app.config["UPLOAD_FOLDER_JOURNALS"] = os.path.join("uploads", "journals")
 app.config["UPLOAD_FOLDER_ASSETS"] = os.path.join("uploads", "assets")
+app.config["MAX_CONTENT_LENGTH"] = MAX_FILE_SIZE
 
 os.makedirs(app.config["UPLOAD_FOLDER_JOURNALS"], exist_ok=True)
 os.makedirs(app.config["UPLOAD_FOLDER_ASSETS"], exist_ok=True)
@@ -106,9 +129,86 @@ site_settings = ensure_data_file(
         "accent_color": "#6610f2",
         "tagline": "Painel interno do jornal escolar",
         "onboarding_done": False,
+        "widgets": DEFAULT_WIDGETS,
     },
 )
+site_settings.setdefault("widgets", DEFAULT_WIDGETS)
 site_settings.setdefault("onboarding_done", False)
+
+
+def persist_site_settings_defaults():
+    changed = False
+    if "widgets" not in site_settings:
+        site_settings["widgets"] = DEFAULT_WIDGETS
+        changed = True
+    if "onboarding_done" not in site_settings:
+        site_settings["onboarding_done"] = False
+        changed = True
+    if changed:
+        save_data(site_settings_path, site_settings)
+
+
+persist_site_settings_defaults()
+
+
+def normalized_widgets():
+    stored_widgets = site_settings.get("widgets") or []
+    default_map = {w["id"]: w for w in DEFAULT_WIDGETS}
+    normalized = []
+    seen_ids = set()
+    for widget in stored_widgets:
+        widget_id = widget.get("id")
+        if not widget_id:
+            continue
+        merged = {**default_map.get(widget_id, {}), **widget}
+        normalized.append(merged)
+        seen_ids.add(widget_id)
+    for widget in DEFAULT_WIDGETS:
+        if widget["id"] not in seen_ids:
+            normalized.append(widget)
+    site_settings["widgets"] = normalized
+    save_data(site_settings_path, site_settings)
+    return normalized
+
+
+def build_widget_cards():
+    widgets = normalized_widgets()
+    open_tickets = len([t for t in tickets if t.get("status") == "aberto"])
+    pending_queue = sum(
+        len([req for req in d.get("queue", []) if req.get("status") == "pendente"])
+        for d in departments
+    )
+    active_students = len(students)
+    next_event = None
+    if calendar_events:
+        try:
+            next_event = sorted(
+                calendar_events, key=lambda e: e.get("date") or "9999-12-31"
+            )[0]
+        except Exception:
+            next_event = None
+
+    widget_cards = []
+    for widget in widgets:
+        card = {**widget}
+        if widget.get("type") == "metric" and widget.get("id") == "students":
+            card["value"] = active_students
+            card["helper"] = "Acesso ao portal em dia"
+        elif widget.get("type") == "metric" and widget.get("id") == "tickets":
+            card["value"] = open_tickets
+            card["helper"] = "Inclui chamados com status aberto"
+        elif widget.get("type") == "metric" and widget.get("id") == "departments":
+            card["value"] = pending_queue
+            card["helper"] = "Solicitações aguardando decisão"
+        elif widget.get("type") == "event":
+            if next_event:
+                card["value"] = next_event.get("title")
+                card["helper"] = f"{next_event.get('date', '')} · {next_event.get('description', '')}".strip()
+            else:
+                card["value"] = "Sem eventos"
+                card["helper"] = "Adicione um evento no calendário"
+        widget_cards.append(card)
+    return [w for w in widget_cards if w.get("enabled")]
 roles = ensure_data_file(
     roles_path,
     [
@@ -168,6 +268,45 @@ REASONS = [
     "Orientação de conteúdo",
     "Conflito de agenda",
     "Outro",
+]
+
+DEFAULT_WIDGETS = [
+    {
+        "id": "welcome",
+        "title": "Boas-vindas",
+        "enabled": True,
+        "type": "text",
+        "subtitle": "Orientação rápida",
+        "content": "Use as guias para organizar o jornal e mantenha as permissões em dia.",
+    },
+    {
+        "id": "students",
+        "title": "Equipe ativa",
+        "enabled": True,
+        "type": "metric",
+        "subtitle": "Fichas cadastradas",
+    },
+    {
+        "id": "tickets",
+        "title": "Tickets abertos",
+        "enabled": True,
+        "type": "metric",
+        "subtitle": "Chamados aguardando resposta",
+    },
+    {
+        "id": "agenda",
+        "title": "Próximo evento",
+        "enabled": True,
+        "type": "event",
+        "subtitle": "Calendário geral",
+    },
+    {
+        "id": "departments",
+        "title": "Filas de departamentos",
+        "enabled": True,
+        "type": "metric",
+        "subtitle": "Pedidos para aprovar",
+    },
 ]
 
 for asset in assets:
@@ -355,6 +494,8 @@ def dashboard():
             key=lambda t: t.get("created_at", ""),
             reverse=True,
         )
+    widget_cards = build_widget_cards()
+    widget_config = normalized_widgets()
     return render_template(
         "dashboard.html",
         current_tab=tab,
@@ -370,6 +511,8 @@ def dashboard():
         all_permissions=all_permissions(),
         tickets=visible_tickets,
         reasons=REASONS,
+        widget_cards=widget_cards,
+        widget_config=widget_config,
     )
 
 
@@ -413,6 +556,9 @@ def create_journal():
     file = request.files.get("file")
     filename = None
     if file and file.filename:
+        if not allowed_file(file.filename, ALLOWED_JOURNAL_EXTENSIONS):
+            flash("Formato não permitido. Envie apenas PDF.", "danger")
+            return redirect(url_for("dashboard", tab="journals"))
         filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
         destination = os.path.join(app.config["UPLOAD_FOLDER_JOURNALS"], filename)
         file.save(destination)
@@ -442,6 +588,10 @@ def upload_asset():
     file = request.files.get("file")
     if not file or not file.filename:
         flash("Selecione um arquivo para enviar", "warning")
+        return redirect(url_for("dashboard", tab="assets"))
+
+    if not allowed_file(file.filename, ALLOWED_ASSET_EXTENSIONS):
+        flash("Formato de arquivo não permitido", "danger")
         return redirect(url_for("dashboard", tab="assets"))
 
     filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
@@ -819,6 +969,26 @@ def update_settings():
     return redirect(url_for("dashboard", tab="settings"))
 
 
+@app.route("/settings/widgets", methods=["POST"])
+@login_required
+@require_permission("manage_settings")
+def update_dashboard_widgets():
+    widgets = normalized_widgets()
+    updated = []
+    for widget in widgets:
+        widget_id = widget.get("id")
+        widget["enabled"] = request.form.get(f"enabled_{widget_id}") == "on"
+        widget["title"] = request.form.get(f"title_{widget_id}") or widget.get("title")
+        widget["subtitle"] = request.form.get(f"subtitle_{widget_id}") or widget.get(
+            "subtitle"
+        )
+        updated.append(widget)
+    site_settings["widgets"] = updated
+    save_data(site_settings_path, site_settings)
+    flash("Widgets atualizados com sucesso", "success")
+    return redirect(url_for("dashboard", tab="settings"))
+
+
 @app.route("/approve/<token>", methods=["GET", "POST"])
 def approve_journal(token):
     journal = next((j for j in journals if j.get("approval_token") == token), None)
@@ -843,4 +1013,8 @@ def approve_journal(token):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=config.get("port", 5000), debug=True)
+    app.run(
+        host="0.0.0.0",
+        port=config.get("port", 5000),
+        debug=bool(config.get("debug", False)),
+    )

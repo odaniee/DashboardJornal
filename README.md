@@ -15,6 +15,7 @@ pip install -r requirements.txt
    - `host`: host exposto (por exemplo, `localhost`)
    - `port`: porta onde o Flask deve iniciar
    - `admin_users`: lista de usuários e senhas de administradores
+   - `debug` (opcional): deixe como `false` em produção para evitar logs sensíveis
 
 3. Execute a aplicação:
 
@@ -47,3 +48,8 @@ A aplicação inicia na porta definida em `config.json` e salva uploads nas past
 - **Versões:** linha do tempo das edições cadastradas com status e motivos de reprovação quando houver.
 - **Tickets de ajuda:** abertura de chamados com motivo, título e urgência, com chat interno; diretores podem responder, fechar ou apagar tickets.
 - **Identidade visual:** escolha de logo, cor principal e cor de destaque diretamente no painel.
+- **Widgets customizáveis:** cards de métricas e recados no topo do dashboard, ativados/renomeados pela guia de configurações.
+
+## Segurança e limitações
+- Uploads são limitados a 16MB e extensões conhecidas (PDF para jornais; PDF, imagens e documentos comuns para arquivos).
+- A flag `debug` é desativada por padrão; configure usuários administradores com senhas fortes no `config.json`.

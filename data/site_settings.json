@@ -1,1 +1,45 @@
-{"logo_url": "", "primary_color": "#0d6efd", "accent_color": "#6610f2", "tagline": "Painel interno do jornal escolar"}
+{
+  "logo_url": "",
+  "primary_color": "#0d6efd",
+  "accent_color": "#6610f2",
+  "tagline": "Painel interno do jornal escolar",
+  "onboarding_done": false,
+  "widgets": [
+    {
+      "id": "welcome",
+      "title": "Boas-vindas",
+      "enabled": true,
+      "type": "text",
+      "subtitle": "Orientação rápida",
+      "content": "Use as guias para organizar o jornal e mantenha as permissões em dia."
+    },
+    {
+      "id": "students",
+      "title": "Equipe ativa",
+      "enabled": true,
+      "type": "metric",
+      "subtitle": "Fichas cadastradas"
+    },
+    {
+      "id": "tickets",
+      "title": "Tickets abertos",
+      "enabled": true,
+      "type": "metric",
+      "subtitle": "Chamados aguardando resposta"
+    },
+    {
+      "id": "agenda",
+      "title": "Próximo evento",
+      "enabled": true,
+      "type": "event",
+      "subtitle": "Calendário geral"
+    },
+    {
+      "id": "departments",
+      "title": "Filas de departamentos",
+      "enabled": true,
+      "type": "metric",
+      "subtitle": "Pedidos para aprovar"
+    }
+  ]
+}

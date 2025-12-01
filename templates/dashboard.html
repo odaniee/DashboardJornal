@@ -8,6 +8,30 @@
   {% endfor %}
 </ul>
 
+{% if widget_cards %}
+  <div class="row g-3 mb-4">
+    {% for widget in widget_cards %}
+    <div class="col-sm-6 col-lg-3">
+      <div class="card widget-card shadow-sm h-100">
+        <div class="card-body">
+          <p class="text-muted small mb-1">{{ widget.subtitle }}</p>
+          <h3 class="h6 fw-bold">{{ widget.title }}</h3>
+          {% if widget.type == 'metric' %}
+            <div class="display-6 fw-semibold text-primary">{{ widget.value }}</div>
+            <div class="small text-muted">{{ widget.helper }}</div>
+          {% elif widget.type == 'event' %}
+            <div class="fw-semibold">{{ widget.value }}</div>
+            <div class="small text-muted">{{ widget.helper }}</div>
+          {% else %}
+            <div class="small text-muted">{{ widget.content or widget.helper }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
 {% if current_tab == 'students' %}
   <div class="row g-4">
     <div class="col-lg-5">
@@ -600,6 +624,34 @@
 {% elif current_tab == 'settings' %}
   <div class="row g-4">
     <div class="col-lg-5">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h2 class="h5">Widgets do dashboard</h2>
+          <form method="post" action="{{ url_for('update_dashboard_widgets') }}">
+            {% for widget in widget_config %}
+            <div class="border rounded p-3 mb-2">
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="enabled_{{ widget.id }}" name="enabled_{{ widget.id }}" {% if widget.enabled %}checked{% endif %}>
+                <label class="form-check-label" for="enabled_{{ widget.id }}">{{ widget.title }}</label>
+              </div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label small" for="title_{{ widget.id }}">Título</label>
+                  <input class="form-control form-control-sm" id="title_{{ widget.id }}" name="title_{{ widget.id }}" value="{{ widget.title }}">
+                </div>
+                <div class="col-6">
+                  <label class="form-label small" for="subtitle_{{ widget.id }}">Subtítulo</label>
+                  <input class="form-control form-control-sm" id="subtitle_{{ widget.id }}" name="subtitle_{{ widget.id }}" value="{{ widget.subtitle }}">
+                </div>
+              </div>
+              <p class="small text-muted mt-2 mb-0">Tipo: {{ widget.type }}</p>
+            </div>
+            {% endfor %}
+            <button class="btn btn-primary mt-2" type="submit">Salvar widgets</button>
+          </form>
+        </div>
+      </div>
+
       <div class="card shadow-sm mb-3">
         <div class="card-body">
           <h2 class="h5">Configurações visuais</h2>
