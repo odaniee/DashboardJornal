@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="h4 mb-3">Inscrição — {{ department.name }}</h1>
+        <p class="text-muted">Diretor: {{ department.director }}</p>
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label" for="name">Nome completo</label>
+            <input class="form-control" id="name" name="name" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="contact">Contato</label>
+            <input class="form-control" id="contact" name="contact" placeholder="E-mail ou telefone" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="desired_role">Função desejada</label>
+            <input class="form-control" id="desired_role" name="desired_role" placeholder="Redator, ilustrador, revisão...">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="motivation">Por que quer participar?</label>
+            <textarea class="form-control" id="motivation" name="motivation" rows="4" required></textarea>
+          </div>
+          <button class="btn btn-primary" type="submit">Enviar inscrição</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

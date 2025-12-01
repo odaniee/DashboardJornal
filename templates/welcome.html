@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-4 align-items-center mb-4">
+  <div class="col-md-7">
+    <div class="p-4 rounded-4 bg-gradient-primary text-white shadow-sm">
+      <p class="text-uppercase small mb-1">Primeira configuração</p>
+      <h1 class="h3 mb-2">Bem-vindo ao painel do jornal</h1>
+      <p class="mb-3">Organize equipes, departamentos e acessos antes de liberar o dashboard completo.</p>
+      <ul class="mb-0 small opacity-75">
+        <li>Cadastre pelo menos um departamento além da Redação.</li>
+        <li>Defina cargos e permissões (Administrador, Gerente, Diretor, etc.).</li>
+        <li>Crie os usuários que terão login e senha.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="card shadow-sm h-100">
+      <div class="card-body d-flex flex-column justify-content-between">
+        <div>
+          <h2 class="h5 mb-2">Resumo de progresso</h2>
+          <p class="small text-muted mb-2">Complete os três passos para liberar o painel.</p>
+          <div class="d-flex flex-column gap-2">
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge {{ departments|length>0 and 'bg-success' or 'bg-secondary' }}">Departamentos</span>
+              <span class="small">{{ departments|length }} criado(s)</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge {{ roles|length>0 and 'bg-success' or 'bg-secondary' }}">Cargos</span>
+              <span class="small">{{ roles|length }} configurado(s)</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge {{ users|length>0 and 'bg-success' or 'bg-secondary' }}">Usuários</span>
+              <span class="small">{{ users|length }} com acesso</span>
+            </div>
+          </div>
+        </div>
+        <form class="mt-3" method="post" action="{{ url_for('complete_onboarding') }}">
+          <button class="btn btn-primary w-100" type="submit">Finalizar e ir ao painel</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h5 mb-0">1. Departamentos</h2>
+          <span class="badge bg-light text-dark">Inclua além da Redação</span>
+        </div>
+        <form method="post" action="{{ url_for('create_department') }}">
+          <input type="hidden" name="redirect_to" value="{{ url_for('welcome') }}">
+          <div class="mb-2">
+            <label class="form-label" for="name">Nome</label>
+            <input class="form-control" id="name" name="name" placeholder="Ex: Artes Visuais" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="director">Diretor</label>
+            <input class="form-control" id="director" name="director" placeholder="Responsável" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="description">Descrição</label>
+            <textarea class="form-control" id="description" name="description" rows="3" placeholder="O que esse time faz"></textarea>
+          </div>
+          <button class="btn btn-outline-primary" type="submit">Adicionar departamento</button>
+        </form>
+        <hr>
+        <ul class="list-group list-group-flush">
+          {% for dept in departments %}
+          <li class="list-group-item d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-semibold">{{ dept.name }}</div>
+              <div class="small text-muted">Diretor: {{ dept.director }}</div>
+            </div>
+            <span class="badge bg-secondary">Fila: {{ dept.queue|length }}</span>
+          </li>
+          {% else %}
+          <li class="list-group-item text-muted">Nenhum departamento criado ainda.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h5 mb-0">2. Cargos e permissões</h2>
+          <span class="badge bg-light text-dark">Admins, Gerentes, Diretores</span>
+        </div>
+        <form method="post" action="{{ url_for('create_role') }}">
+          <input type="hidden" name="redirect_to" value="{{ url_for('welcome') }}">
+          <div class="mb-2">
+            <label class="form-label" for="role-name">Nome</label>
+            <input class="form-control" id="role-name" name="name" placeholder="Ex: Editor-chefe" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="role-description">Descrição</label>
+            <input class="form-control" id="role-description" name="description" placeholder="Breve resumo" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Permissões</label>
+            <div class="row row-cols-2 g-2">
+              {% for perm in all_permissions %}
+              <div class="col">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" value="{{ perm }}" id="perm-{{ loop.index }}" name="permissions">
+                  <label class="form-check-label small" for="perm-{{ loop.index }}">{{ perm }}</label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          <button class="btn btn-outline-primary" type="submit">Criar cargo</button>
+        </form>
+        <div class="mt-3 small text-muted">
+          Padrões existentes: Administrador (total), Gerente (calendário, arquivos, alunos) e Diretor de Departamento (filas de membros e agenda do time).
+        </div>
+      </div>
+    </div>
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h5 mb-0">3. Usuários com login</h2>
+          <span class="badge bg-light text-dark">Escolha admins e gerentes</span>
+        </div>
+        <form method="post" action="{{ url_for('create_user') }}">
+          <input type="hidden" name="redirect_to" value="{{ url_for('welcome') }}">
+          <div class="mb-2">
+            <label class="form-label" for="user-name">Nome completo</label>
+            <input class="form-control" id="user-name" name="name" required>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-6">
+              <label class="form-label" for="user-username">Usuário</label>
+              <input class="form-control" id="user-username" name="username" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="user-password">Senha</label>
+              <input class="form-control" id="user-password" name="password" type="password" required>
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="user-role">Cargo</label>
+            <select class="form-select" id="user-role" name="role">
+              {% for role in roles %}
+              <option value="{{ role.name }}">{{ role.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="portal_enabled_user" name="portal_enabled" checked>
+            <label class="form-check-label" for="portal_enabled_user">Habilitar acesso ao portal</label>
+          </div>
+          <button class="btn btn-outline-primary" type="submit">Cadastrar usuário</button>
+        </form>
+        <hr>
+        <ul class="list-group list-group-flush">
+          {% for user in users %}
+          <li class="list-group-item d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-semibold">{{ user.name }}</div>
+              <div class="small text-muted">{{ user.username }} · {{ user.role }}</div>
+            </div>
+            <span class="badge {{ user.portal_enabled and 'bg-success' or 'bg-secondary' }}">{{ user.portal_enabled and 'Ativo' or 'Bloqueado' }}</span>
+          </li>
+          {% else %}
+          <li class="list-group-item text-muted">Ainda não há contas criadas.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
