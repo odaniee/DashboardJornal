@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+{% block content %}
+<ul class="nav nav-tabs mb-3">
+  {% for tab, label in dashboard_tabs %}
+    <li class="nav-item">
+      <a class="nav-link {% if current_tab == tab %}active{% endif %}" href="{{ url_for('dashboard', tab=tab) }}">{{ label }}</a>
+    </li>
+  {% endfor %}
+</ul>
+
+{% if current_tab == 'students' %}
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Nova ficha</h2>
+          <form method="post" action="{{ url_for('create_student') }}">
+            <div class="mb-3">
+              <label class="form-label" for="name">Nome</label>
+              <input class="form-control" id="name" name="name" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="role">Função no jornal</label>
+              <input class="form-control" id="role" name="role" placeholder="Repórter, editor, revisor...">
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="contact">Contato</label>
+              <input class="form-control" id="contact" name="contact" placeholder="E-mail ou telefone">
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="notes">Observações</label>
+              <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="portal_enabled" name="portal_enabled" checked>
+              <label class="form-check-label" for="portal_enabled">Habilitar acesso ao portal</label>
+            </div>
+            <button class="btn btn-primary" type="submit">Salvar ficha</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Participantes cadastrados</h2>
+          <div class="d-flex flex-wrap gap-3">
+            {% for student in students %}
+            <div class="card participant-card flex-grow-1">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <h3 class="h6 mb-1">{{ student.name }}</h3>
+                    <p class="mb-1 text-muted">{{ student.role or 'Função não informada' }}</p>
+                    <p class="mb-1 small">{{ student.contact }}</p>
+                  </div>
+                  <span class="badge {% if student.portal_enabled %}bg-success{% else %}bg-secondary{% endif %}">
+                    {% if student.portal_enabled %}Portal liberado{% else %}Portal bloqueado{% endif %}
+                  </span>
+                </div>
+                <p class="mt-2 small">{{ student.notes or 'Sem observações' }}</p>
+                <div class="d-flex gap-2">
+                  <form method="post" action="{{ url_for('toggle_student', student_id=student.id) }}">
+                    <button class="btn btn-sm btn-outline-primary" type="submit">
+                      {% if student.portal_enabled %}Bloquear{% else %}Liberar{% endif %}
+                    </button>
+                  </form>
+                  <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">Imprimir ficha</button>
+                </div>
+              </div>
+            </div>
+            {% else %}
+            <p class="text-muted">Nenhum participante cadastrado ainda.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% elif current_tab == 'journals' %}
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h2 class="h5">Novo jornal</h2>
+          <form method="post" action="{{ url_for('create_journal') }}" enctype="multipart/form-data">
+            <div class="mb-3">
+              <label class="form-label" for="title">Título</label>
+              <input class="form-control" id="title" name="title" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="edition">Edição</label>
+              <input class="form-control" id="edition" name="edition" placeholder="Ex: 25ª edição" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="release_date">Data de lançamento</label>
+              <input class="form-control" type="date" id="release_date" name="release_date" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="description">Resumo</label>
+              <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="file">PDF do jornal (opcional)</label>
+              <input class="form-control" type="file" id="file" name="file" accept="application/pdf">
+            </div>
+            <button class="btn btn-primary" type="submit">Enviar para aprovação</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Jornais</h2>
+          <div class="list-group">
+            {% for journal in journals %}
+            <div class="list-group-item">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <h3 class="h6 mb-1">{{ journal.title }}</h3>
+                  <p class="mb-1 text-muted">{{ journal.edition }} · Lançamento: {{ journal.release_date }}</p>
+                  <p class="mb-2 small">{{ journal.description }}</p>
+                  <div class="badge bg-info text-dark">Status: {{ journal.status }}</div>
+                  {% if journal.approval_reason %}
+                    <div class="small text-danger">Motivo: {{ journal.approval_reason }}</div>
+                  {% endif %}
+                  <div class="mt-2">
+                    <span class="small fw-semibold">Link de aprovação:</span>
+                    <code class="d-block text-break">{{ base_url }}{{ url_for('approve_journal', token=journal.approval_token) }}</code>
+                  </div>
+                </div>
+                <div class="ms-3 text-end">
+                  {% if journal.file %}
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_journal', filename=journal.file) }}">PDF</a>
+                  {% endif %}
+                  <span class="badge bg-secondary ms-2">Criado em {{ journal.created_at[:10] }}</span>
+                </div>
+              </div>
+            </div>
+            {% else %}
+            <p class="text-muted">Nenhum jornal cadastrado.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% elif current_tab == 'assets' %}
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h2 class="h5">Enviar arquivo</h2>
+          <form method="post" action="{{ url_for('upload_asset') }}" enctype="multipart/form-data">
+            <div class="mb-3">
+              <label class="form-label" for="file">Arquivo</label>
+              <input class="form-control" type="file" id="file" name="file" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="notes">Notas de uso</label>
+              <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit">Guardar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Arquivos enviados</h2>
+          <div class="list-group">
+            {% for asset in assets %}
+            <div class="list-group-item d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold">{{ asset.original_name }}</div>
+                <div class="small text-muted">{{ asset.uploaded_at[:10] }}</div>
+                <div class="small">{{ asset.notes }}</div>
+              </div>
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_asset', filename=asset.stored_name) }}">Baixar</a>
+            </div>
+            {% else %}
+            <p class="text-muted">Nenhum arquivo enviado.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% elif current_tab == 'versions' %}
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h2 class="h5">Linha do tempo de versões</h2>
+      <div class="timeline">
+        {% for journal in journals %}
+        <div class="timeline-item">
+          <div class="timeline-date">{{ journal.release_date }}</div>
+          <div class="timeline-content">
+            <div class="fw-semibold">{{ journal.edition }} — {{ journal.title }}</div>
+            <div class="small text-muted">Status: {{ journal.status }}</div>
+            {% if journal.approval_reason %}
+              <div class="small text-danger">Motivo: {{ journal.approval_reason }}</div>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted">Ainda não há edições cadastradas.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
