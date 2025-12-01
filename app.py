@@ -35,10 +35,66 @@ ALLOWED_ASSET_EXTENSIONS = {
     "pptx",
 }
 
+DEFAULT_WIDGETS = [
+    {
+        "id": "welcome",
+        "title": "Boas-vindas",
+        "enabled": True,
+        "type": "text",
+        "subtitle": "Orientação rápida",
+        "content": "Use as guias para organizar o jornal e mantenha as permissões em dia.",
+    },
+    {
+        "id": "students",
+        "title": "Equipe ativa",
+        "enabled": True,
+        "type": "metric",
+        "subtitle": "Fichas cadastradas",
+    },
+    {
+        "id": "tickets",
+        "title": "Tickets abertos",
+        "enabled": True,
+        "type": "metric",
+        "subtitle": "Chamados aguardando resposta",
+    },
+    {
+        "id": "agenda",
+        "title": "Próximo evento",
+        "enabled": True,
+        "type": "event",
+        "subtitle": "Calendário geral",
+    },
+    {
+        "id": "departments",
+        "title": "Filas de departamentos",
+        "enabled": True,
+        "type": "metric",
+        "subtitle": "Pedidos para aprovar",
+    },
+]
+
 
 def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as config_file:
         return json.load(config_file)
+
+
+def save_config(config_data):
+    with open(CONFIG_PATH, "w", encoding="utf-8") as config_file:
+        json.dump(config_data, config_file, ensure_ascii=False, indent=2)
+
+
+def ensure_admin_password_hashes(config_data):
+    changed = False
+    for admin in config_data.get("admin_users", []):
+        plaintext = admin.pop("password", None)
+        if plaintext:
+            admin["password_hash"] = generate_password_hash(plaintext)
+            changed = True
+    if changed:
+        save_config(config_data)
+    return config_data
 
 
 def ensure_data_file(path, default):
@@ -90,7 +146,7 @@ def allowed_file(filename, allowed_extensions):
     return filename.rsplit(".", 1)[1].lower() in allowed_extensions
 
 
-config = load_config()
+config = ensure_admin_password_hashes(load_config())
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev-secret-key")
 app.config["UPLOAD_FOLDER_JOURNALS"] = os.path.join("uploads", "journals")
@@ -270,45 +326,6 @@ REASONS = [
     "Outro",
 ]
 
-DEFAULT_WIDGETS = [
-    {
-        "id": "welcome",
-        "title": "Boas-vindas",
-        "enabled": True,
-        "type": "text",
-        "subtitle": "Orientação rápida",
-        "content": "Use as guias para organizar o jornal e mantenha as permissões em dia.",
-    },
-    {
-        "id": "students",
-        "title": "Equipe ativa",
-        "enabled": True,
-        "type": "metric",
-        "subtitle": "Fichas cadastradas",
-    },
-    {
-        "id": "tickets",
-        "title": "Tickets abertos",
-        "enabled": True,
-        "type": "metric",
-        "subtitle": "Chamados aguardando resposta",
-    },
-    {
-        "id": "agenda",
-        "title": "Próximo evento",
-        "enabled": True,
-        "type": "event",
-        "subtitle": "Calendário geral",
-    },
-    {
-        "id": "departments",
-        "title": "Filas de departamentos",
-        "enabled": True,
-        "type": "metric",
-        "subtitle": "Pedidos para aprovar",
-    },
-]
-
 for asset in assets:
     asset.setdefault("scope", "pessoal")
     asset.setdefault("owner", "")
@@ -400,15 +417,17 @@ def login():
         password = request.form.get("password")
 
         for admin in config.get("admin_users", []):
-            if admin.get("username") == username and admin.get("password") == password:
-                admin_perms = permissions_for_role("Administrador") or all_permissions()
-                session["user"] = {
-                    "username": username,
-                    "role": "Administrador",
-                    "permissions": admin_perms,
-                }
-                flash("Login realizado com sucesso", "success")
-                return redirect(url_for("dashboard"))
+            password_hash = admin.get("password_hash")
+            if admin.get("username") == username and password_hash:
+                if check_password_hash(password_hash, password):
+                    admin_perms = permissions_for_role("Administrador") or all_permissions()
+                    session["user"] = {
+                        "username": username,
+                        "role": "Administrador",
+                        "permissions": admin_perms,
+                    }
+                    flash("Login realizado com sucesso", "success")
+                    return redirect(url_for("dashboard"))
 
         for user in users:
             if user.get("username") == username and user.get("portal_enabled", True):
