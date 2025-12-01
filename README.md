@@ -32,6 +32,7 @@ A aplicação inicia na porta definida em `config.json` e salva uploads nas past
 - `data/announcements.json`: canal de recados administrativos
 - `data/calendar.json`: eventos gerais e por departamento
 - `data/departments.json`: departamentos, filas e membros
+- `data/tickets.json`: tickets de suporte e conversas com a diretoria
 - `data/site_settings.json`: ajustes de identidade visual
 
 ## Funcionalidades
@@ -44,4 +45,5 @@ A aplicação inicia na porta definida em `config.json` e salva uploads nas past
 - **Jornais:** criação de edições, upload de PDF e geração de link público para aprovação/reprovação com justificativa.
 - **Arquivos:** upload e download de materiais pessoais ou por departamento (estilo drive interno).
 - **Versões:** linha do tempo das edições cadastradas com status e motivos de reprovação quando houver.
+- **Tickets de ajuda:** abertura de chamados com motivo, título e urgência, com chat interno; diretores podem responder, fechar ou apagar tickets.
 - **Identidade visual:** escolha de logo, cor principal e cor de destaque diretamente no painel.

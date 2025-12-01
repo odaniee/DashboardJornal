@@ -87,6 +87,7 @@ departments_path = os.path.join("data", "departments.json")
 site_settings_path = os.path.join("data", "site_settings.json")
 roles_path = os.path.join("data", "roles.json")
 users_path = os.path.join("data", "users.json")
+tickets_path = os.path.join("data", "tickets.json")
 
 students = ensure_data_file(students_path, [])
 journals = ensure_data_file(journals_path, [])
@@ -126,6 +127,7 @@ roles = ensure_data_file(
                 "manage_settings",
                 "manage_roles",
                 "manage_users",
+                "manage_tickets",
             ],
         },
         {
@@ -137,6 +139,7 @@ roles = ensure_data_file(
                 "manage_calendar",
                 "manage_announcements",
                 "manage_departments",
+                "manage_tickets",
             ],
         },
         {
@@ -146,6 +149,7 @@ roles = ensure_data_file(
                 "manage_assets",
                 "manage_calendar",
                 "approve_departments",
+                "manage_tickets",
             ],
         },
         {
@@ -156,11 +160,27 @@ roles = ensure_data_file(
     ],
 )
 users = ensure_data_file(users_path, [])
+tickets = ensure_data_file(tickets_path, [])
+
+REASONS = [
+    "Problema técnico",
+    "Solicitação de acesso",
+    "Orientação de conteúdo",
+    "Conflito de agenda",
+    "Outro",
+]
 
 for asset in assets:
     asset.setdefault("scope", "pessoal")
     asset.setdefault("owner", "")
     asset.setdefault("department_id", None)
+
+for role in roles:
+    permissions = role.setdefault("permissions", [])
+    if role.get("name") in {"Administrador", "Gerente", "Diretor de Departamento"}:
+        if "manage_tickets" not in permissions:
+            permissions.append("manage_tickets")
+save_data(roles_path, roles)
 
 if not departments:
     departments.append(
@@ -190,11 +210,13 @@ def inject_globals():
             ("announcements", "Administração"),
             ("calendar", "Calendário"),
             ("departments", "Departamentos"),
+            ("tickets", "Ajuda"),
             ("settings", "Configuração"),
             ("versions", "Versões"),
         ],
         "site_settings": site_settings,
         "roles": roles,
+        "current_user": current_user(),
     }
 
 
@@ -219,6 +241,10 @@ def current_username():
     if isinstance(user, dict):
         return user.get("username")
     return user
+
+
+def current_user():
+    return session.get("user") or {}
 
 
 @app.route("/")
@@ -318,6 +344,17 @@ def dashboard():
     sorted_departments = sorted(departments, key=lambda d: d.get("name", "").lower())
     sorted_users = sorted(users, key=lambda u: u.get("name", "").lower())
     sorted_roles = sorted(roles, key=lambda r: r.get("name", "").lower())
+    user = current_user()
+    if "manage_tickets" in user.get("permissions", []):
+        visible_tickets = sorted(
+            tickets, key=lambda t: t.get("created_at", ""), reverse=True
+        )
+    else:
+        visible_tickets = sorted(
+            [t for t in tickets if t.get("created_by") == current_username()],
+            key=lambda t: t.get("created_at", ""),
+            reverse=True,
+        )
     return render_template(
         "dashboard.html",
         current_tab=tab,
@@ -331,6 +368,8 @@ def dashboard():
         users=sorted_users,
         roles=sorted_roles,
         all_permissions=all_permissions(),
+        tickets=visible_tickets,
+        reasons=REASONS,
     )
 
 
@@ -496,6 +535,97 @@ def add_calendar_event():
     flash("Evento adicionado", "success")
     destination = request.form.get("redirect_to") or url_for("dashboard", tab="calendar")
     return redirect(destination)
+
+
+@app.route("/tickets", methods=["POST"])
+@login_required
+def create_ticket():
+    reason = request.form.get("reason") or "Outro"
+    custom_reason = request.form.get("custom_reason")
+    ticket = {
+        "id": str(uuid.uuid4()),
+        "title": request.form.get("title"),
+        "reason": custom_reason if reason == "Outro" else reason,
+        "urgency": request.form.get("urgency", "normal"),
+        "status": "aberto",
+        "created_by": current_username(),
+        "created_role": current_user().get("role"),
+        "messages": [
+            {
+                "author": current_username(),
+                "role": current_user().get("role"),
+                "body": request.form.get("message"),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        ],
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    tickets.append(ticket)
+    save_data(tickets_path, tickets)
+    flash("Ticket criado e enviado para a diretoria", "success")
+    return redirect(url_for("dashboard", tab="tickets"))
+
+
+@app.route("/tickets/<ticket_id>/reply", methods=["POST"])
+@login_required
+def reply_ticket(ticket_id):
+    ticket = next((t for t in tickets if t.get("id") == ticket_id), None)
+    if not ticket:
+        flash("Ticket não encontrado", "danger")
+        return redirect(url_for("dashboard", tab="tickets"))
+
+    user = current_user()
+    permissions = user.get("permissions", [])
+    if ticket.get("created_by") != current_username() and "manage_tickets" not in permissions:
+        flash("Você não pode interagir com este ticket", "danger")
+        return redirect(url_for("dashboard", tab="tickets"))
+
+    ticket.setdefault("messages", []).append(
+        {
+            "author": current_username(),
+            "role": user.get("role"),
+            "body": request.form.get("message"),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    )
+    if ticket.get("status") == "fechado" and "manage_tickets" in permissions:
+        ticket["status"] = "aberto"
+    save_data(tickets_path, tickets)
+    flash("Resposta enviada", "success")
+    return redirect(url_for("dashboard", tab="tickets"))
+
+
+@app.route("/tickets/<ticket_id>/close", methods=["POST"])
+@login_required
+@require_permission("manage_tickets")
+def close_ticket(ticket_id):
+    ticket = next((t for t in tickets if t.get("id") == ticket_id), None)
+    if not ticket:
+        flash("Ticket não encontrado", "danger")
+        return redirect(url_for("dashboard", tab="tickets"))
+    ticket["status"] = "fechado"
+    ticket.setdefault("messages", []).append(
+        {
+            "author": current_username(),
+            "role": current_user().get("role"),
+            "body": request.form.get("message") or "Ticket fechado",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    )
+    save_data(tickets_path, tickets)
+    flash("Ticket encerrado", "info")
+    return redirect(url_for("dashboard", tab="tickets"))
+
+
+@app.route("/tickets/<ticket_id>/delete", methods=["POST"])
+@login_required
+@require_permission("manage_tickets")
+def delete_ticket(ticket_id):
+    global tickets
+    tickets = [t for t in tickets if t.get("id") != ticket_id]
+    save_data(tickets_path, tickets)
+    flash("Ticket removido", "info")
+    return redirect(url_for("dashboard", tab="tickets"))
 
 
 @app.route("/departments", methods=["POST"])
