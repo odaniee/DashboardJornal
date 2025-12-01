@@ -37,7 +37,7 @@
       <span class="navbar-text text-light small d-none d-md-block">{{ site_settings.tagline }}</span>
       <div class="d-flex">
         {% if session.get('user') %}
-          <span class="navbar-text me-3">Olá, {{ session['user'] }}</span>
+          <span class="navbar-text me-3">Olá, {{ session['user']['username'] if session['user'] is mapping else session['user'] }}</span>
           <a class="btn btn-outline-light" href="{{ url_for('logout') }}">Sair</a>
         {% endif %}
       </div>

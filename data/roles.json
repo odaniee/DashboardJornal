@@ -1,0 +1,44 @@
+[
+  {
+    "name": "Administrador",
+    "description": "Acesso total ao painel e configurações",
+    "permissions": [
+      "manage_students",
+      "manage_journals",
+      "manage_assets",
+      "manage_rules",
+      "manage_announcements",
+      "manage_calendar",
+      "manage_departments",
+      "approve_departments",
+      "manage_settings",
+      "manage_roles",
+      "manage_users"
+    ]
+  },
+  {
+    "name": "Gerente",
+    "description": "Cuida de pessoas, calendários e arquivos",
+    "permissions": [
+      "manage_students",
+      "manage_assets",
+      "manage_calendar",
+      "manage_announcements",
+      "manage_departments"
+    ]
+  },
+  {
+    "name": "Diretor de Departamento",
+    "description": "Aprova filas e acompanha entregas do time",
+    "permissions": [
+      "manage_assets",
+      "manage_calendar",
+      "approve_departments"
+    ]
+  },
+  {
+    "name": "Colaborador",
+    "description": "Acesso apenas para consultar materiais",
+    "permissions": []
+  }
+]

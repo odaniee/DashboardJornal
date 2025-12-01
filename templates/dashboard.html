@@ -502,9 +502,9 @@
   </div>
 
 {% elif current_tab == 'settings' %}
-  <div class="row justify-content-center">
-    <div class="col-lg-7">
-      <div class="card shadow-sm">
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card shadow-sm mb-3">
         <div class="card-body">
           <h2 class="h5">Configurações visuais</h2>
           <form method="post" action="{{ url_for('update_settings') }}">
@@ -526,8 +526,123 @@
                 <input class="form-control form-control-color" type="color" id="accent_color" name="accent_color" value="{{ site_settings.accent_color }}" title="Selecione a cor de destaque">
               </div>
             </div>
-            <button class="btn btn-primary mt-3" type="submit">Salvar</button>
+            <button class="btn btn-primary mt-3" type="submit">Salvar tema</button>
           </form>
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h6 text-uppercase text-muted">Governança rápida</h2>
+          <p class="small mb-2">Promova alguém para Administrador, Gerente ou Diretor de Departamento.</p>
+          <div class="list-group">
+            {% for user in users %}
+            <div class="list-group-item">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">{{ user.name }}</div>
+                  <div class="small text-muted">{{ user.username }} · {{ user.role }}</div>
+                </div>
+                <span class="badge {{ user.portal_enabled and 'bg-success' or 'bg-secondary' }}">{{ user.portal_enabled and 'Ativo' or 'Bloqueado' }}</span>
+              </div>
+              <div class="d-flex gap-2 mt-2 flex-wrap">
+                <form method="post" action="{{ url_for('update_user_role', user_id=user.id) }}" class="d-flex gap-2 align-items-center">
+                  <select class="form-select form-select-sm" name="role">
+                    {% for role in roles %}
+                    <option value="{{ role.name }}" {% if role.name == user.role %}selected{% endif %}>{{ role.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <input type="hidden" name="redirect_to" value="{{ url_for('dashboard', tab='settings') }}">
+                  <button class="btn btn-sm btn-outline-primary" type="submit">Aplicar</button>
+                </form>
+                <form method="post" action="{{ url_for('toggle_user_access', user_id=user.id) }}">
+                  <input type="hidden" name="redirect_to" value="{{ url_for('dashboard', tab='settings') }}">
+                  <button class="btn btn-sm btn-outline-secondary" type="submit">{{ user.portal_enabled and 'Bloquear' or 'Liberar' }}</button>
+                </form>
+              </div>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">Nenhum usuário cadastrado ainda.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h2 class="h5">Novo usuário com acesso</h2>
+          <form method="post" action="{{ url_for('create_user') }}">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="name">Nome</label>
+                <input class="form-control" id="name" name="name" required>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="username">Usuário</label>
+                <input class="form-control" id="username" name="username" required>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="password">Senha</label>
+                <input class="form-control" id="password" name="password" type="password" required>
+              </div>
+            </div>
+            <div class="row g-3 mt-1">
+              <div class="col-md-6">
+                <label class="form-label" for="role">Cargo</label>
+                <select class="form-select" id="role" name="role">
+                  {% for role in roles %}
+                  <option value="{{ role.name }}">{{ role.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6 d-flex align-items-end">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="portal_enabled" name="portal_enabled" checked>
+                  <label class="form-check-label" for="portal_enabled">Permitir acesso imediato</label>
+                </div>
+              </div>
+            </div>
+            <input type="hidden" name="redirect_to" value="{{ url_for('dashboard', tab='settings') }}">
+            <button class="btn btn-primary mt-3" type="submit">Criar usuário</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Novo cargo com permissões</h2>
+          <form method="post" action="{{ url_for('create_role') }}">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label" for="role-name-dashboard">Nome</label>
+                <input class="form-control" id="role-name-dashboard" name="name" required>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label" for="role-desc-dashboard">Descrição</label>
+                <input class="form-control" id="role-desc-dashboard" name="description" required>
+              </div>
+            </div>
+            <div class="mt-3">
+              <label class="form-label">Permissões</label>
+              <div class="row row-cols-2 row-cols-md-3 g-2">
+                {% for perm in all_permissions %}
+                <div class="col">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="{{ perm }}" id="role-perm-{{ loop.index }}" name="permissions">
+                    <label class="form-check-label small" for="role-perm-{{ loop.index }}">{{ perm }}</label>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <input type="hidden" name="redirect_to" value="{{ url_for('dashboard', tab='settings') }}">
+            <button class="btn btn-primary mt-3" type="submit">Salvar cargo</button>
+          </form>
+          <div class="mt-3 small text-muted">
+            Sugestões: promova quem lidera times de conteúdo para "Diretor de Departamento" e mantenha apenas a coordenação pedagógica como "Administrador".
+          </div>
         </div>
       </div>
     </div>

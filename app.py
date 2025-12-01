@@ -14,6 +14,7 @@ from flask import (
     session,
     url_for,
 )
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
@@ -41,11 +42,30 @@ def login_required(view):
     @wraps(view)
     def wrapped_view(**kwargs):
         if not session.get("user"):
-            flash("Entre com um usuário administrador para continuar", "warning")
+            flash("Entre com um usuário habilitado para continuar", "warning")
             return redirect(url_for("login"))
         return view(**kwargs)
 
     return wrapped_view
+
+
+def require_permission(permission):
+    def decorator(view):
+        @wraps(view)
+        def wrapped_view(**kwargs):
+            user = session.get("user")
+            if not user:
+                flash("Sessão expirada", "warning")
+                return redirect(url_for("login"))
+            permissions = user.get("permissions", [])
+            if permission not in permissions:
+                flash("Você não tem permissão para essa ação", "danger")
+                return redirect(url_for("dashboard"))
+            return view(**kwargs)
+
+        return wrapped_view
+
+    return decorator
 
 
 config = load_config()
@@ -65,6 +85,8 @@ announcements_path = os.path.join("data", "announcements.json")
 calendar_path = os.path.join("data", "calendar.json")
 departments_path = os.path.join("data", "departments.json")
 site_settings_path = os.path.join("data", "site_settings.json")
+roles_path = os.path.join("data", "roles.json")
+users_path = os.path.join("data", "users.json")
 
 students = ensure_data_file(students_path, [])
 journals = ensure_data_file(journals_path, [])
@@ -82,13 +104,77 @@ site_settings = ensure_data_file(
         "primary_color": "#0d6efd",
         "accent_color": "#6610f2",
         "tagline": "Painel interno do jornal escolar",
+        "onboarding_done": False,
     },
 )
+site_settings.setdefault("onboarding_done", False)
+roles = ensure_data_file(
+    roles_path,
+    [
+        {
+            "name": "Administrador",
+            "description": "Acesso total ao painel e configurações",
+            "permissions": [
+                "manage_students",
+                "manage_journals",
+                "manage_assets",
+                "manage_rules",
+                "manage_announcements",
+                "manage_calendar",
+                "manage_departments",
+                "approve_departments",
+                "manage_settings",
+                "manage_roles",
+                "manage_users",
+            ],
+        },
+        {
+            "name": "Gerente",
+            "description": "Cuida de pessoas, calendários e arquivos",
+            "permissions": [
+                "manage_students",
+                "manage_assets",
+                "manage_calendar",
+                "manage_announcements",
+                "manage_departments",
+            ],
+        },
+        {
+            "name": "Diretor de Departamento",
+            "description": "Aprova filas e acompanha entregas do time",
+            "permissions": [
+                "manage_assets",
+                "manage_calendar",
+                "approve_departments",
+            ],
+        },
+        {
+            "name": "Colaborador",
+            "description": "Acesso apenas para consultar materiais",
+            "permissions": [],
+        },
+    ],
+)
+users = ensure_data_file(users_path, [])
 
 for asset in assets:
     asset.setdefault("scope", "pessoal")
     asset.setdefault("owner", "")
     asset.setdefault("department_id", None)
+
+if not departments:
+    departments.append(
+        {
+            "id": str(uuid.uuid4()),
+            "name": "Redação",
+            "description": "Produção de textos e pautas do jornal",
+            "director": "Definir diretor",
+            "join_token": str(uuid.uuid4()),
+            "members": [],
+            "queue": [],
+        }
+    )
+    save_data(departments_path, departments)
 
 
 @app.context_processor
@@ -108,7 +194,31 @@ def inject_globals():
             ("versions", "Versões"),
         ],
         "site_settings": site_settings,
+        "roles": roles,
     }
+
+
+def find_role(role_name):
+    return next((role for role in roles if role.get("name") == role_name), None)
+
+
+def permissions_for_role(role_name):
+    role = find_role(role_name)
+    return role.get("permissions", []) if role else []
+
+
+def all_permissions():
+    perm_set = set()
+    for role in roles:
+        perm_set.update(role.get("permissions", []))
+    return sorted(list(perm_set))
+
+
+def current_username():
+    user = session.get("user")
+    if isinstance(user, dict):
+        return user.get("username")
+    return user
 
 
 @app.route("/")
@@ -126,11 +236,28 @@ def login():
 
         for admin in config.get("admin_users", []):
             if admin.get("username") == username and admin.get("password") == password:
-                session["user"] = username
+                admin_perms = permissions_for_role("Administrador") or all_permissions()
+                session["user"] = {
+                    "username": username,
+                    "role": "Administrador",
+                    "permissions": admin_perms,
+                }
                 flash("Login realizado com sucesso", "success")
                 return redirect(url_for("dashboard"))
 
-        flash("Usuário ou senha inválidos", "danger")
+        for user in users:
+            if user.get("username") == username and user.get("portal_enabled", True):
+                if check_password_hash(user.get("password_hash", ""), password):
+                    perms = permissions_for_role(user.get("role"))
+                    session["user"] = {
+                        "username": username,
+                        "role": user.get("role"),
+                        "permissions": perms,
+                    }
+                    flash("Login realizado com sucesso", "success")
+                    return redirect(url_for("dashboard"))
+
+        flash("Usuário ou senha inválidos ou acesso bloqueado", "danger")
 
     return render_template("login.html")
 
@@ -143,9 +270,41 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/welcome")
+@login_required
+@require_permission("manage_settings")
+def welcome():
+    sorted_departments = sorted(departments, key=lambda d: d.get("name", "").lower())
+    sorted_users = sorted(users, key=lambda u: u.get("name", "").lower())
+    sorted_roles = sorted(roles, key=lambda r: r.get("name", "").lower())
+    return render_template(
+        "welcome.html",
+        departments=sorted_departments,
+        users=sorted_users,
+        roles=sorted_roles,
+        all_permissions=all_permissions(),
+    )
+
+
+@app.route("/welcome/complete", methods=["POST"])
+@login_required
+@require_permission("manage_settings")
+def complete_onboarding():
+    if not departments or not users:
+        flash("Crie ao menos um departamento e um usuário para finalizar", "warning")
+        return redirect(url_for("welcome"))
+    site_settings["onboarding_done"] = True
+    save_data(site_settings_path, site_settings)
+    flash("Configuração inicial concluída!", "success")
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
+    if not site_settings.get("onboarding_done"):
+        return redirect(url_for("welcome"))
+
     tab = request.args.get("tab", "students")
     sorted_students = sorted(students, key=lambda s: s.get("name", "").lower())
     sorted_journals = sorted(
@@ -157,6 +316,8 @@ def dashboard():
     )
     sorted_events = sorted(calendar_events, key=lambda e: e.get("date", ""))
     sorted_departments = sorted(departments, key=lambda d: d.get("name", "").lower())
+    sorted_users = sorted(users, key=lambda u: u.get("name", "").lower())
+    sorted_roles = sorted(roles, key=lambda r: r.get("name", "").lower())
     return render_template(
         "dashboard.html",
         current_tab=tab,
@@ -167,11 +328,15 @@ def dashboard():
         announcements=sorted_announcements,
         calendar_events=sorted_events,
         departments=sorted_departments,
+        users=sorted_users,
+        roles=sorted_roles,
+        all_permissions=all_permissions(),
     )
 
 
 @app.route("/students", methods=["POST"])
 @login_required
+@require_permission("manage_students")
 def create_student():
     student = {
         "id": str(uuid.uuid4()),
@@ -185,11 +350,13 @@ def create_student():
     students.append(student)
     save_data(students_path, students)
     flash("Ficha de participante criada", "success")
-    return redirect(url_for("dashboard", tab="students"))
+    destination = request.form.get("redirect_to") or url_for("dashboard", tab="students")
+    return redirect(destination)
 
 
 @app.route("/students/<student_id>/toggle", methods=["POST"])
 @login_required
+@require_permission("manage_students")
 def toggle_student(student_id):
     for student in students:
         if student.get("id") == student_id:
@@ -202,6 +369,7 @@ def toggle_student(student_id):
 
 @app.route("/journals", methods=["POST"])
 @login_required
+@require_permission("manage_journals")
 def create_journal():
     file = request.files.get("file")
     filename = None
@@ -230,6 +398,7 @@ def create_journal():
 
 @app.route("/assets", methods=["POST"])
 @login_required
+@require_permission("manage_assets")
 def upload_asset():
     file = request.files.get("file")
     if not file or not file.filename:
@@ -245,7 +414,7 @@ def upload_asset():
         "original_name": file.filename,
         "stored_name": filename,
         "notes": request.form.get("notes"),
-        "owner": request.form.get("owner") or session.get("user"),
+        "owner": request.form.get("owner") or current_username(),
         "department_id": request.form.get("department_id") or None,
         "scope": "departamento" if request.form.get("department_id") else "pessoal",
         "uploaded_at": datetime.utcnow().isoformat(),
@@ -253,7 +422,8 @@ def upload_asset():
     assets.append(asset)
     save_data(assets_path, assets)
     flash("Arquivo arquivado com sucesso", "success")
-    return redirect(url_for("dashboard", tab="assets"))
+    destination = request.form.get("redirect_to") or url_for("dashboard", tab="assets")
+    return redirect(destination)
 
 
 @app.route("/uploads/journals/<filename>")
@@ -270,6 +440,7 @@ def download_asset(filename):
 
 @app.route("/rules", methods=["POST"])
 @login_required
+@require_permission("manage_rules")
 def update_rules():
     rules["content"] = request.form.get("content", "")
     rules["updated_at"] = datetime.utcnow().isoformat()
@@ -280,6 +451,7 @@ def update_rules():
 
 @app.route("/announcements", methods=["POST"])
 @login_required
+@require_permission("manage_announcements")
 def create_announcement():
     announcement = {
         "id": str(uuid.uuid4()),
@@ -292,11 +464,13 @@ def create_announcement():
     announcements.append(announcement)
     save_data(announcements_path, announcements)
     flash("Mensagem publicada", "success")
-    return redirect(url_for("dashboard", tab="announcements"))
+    destination = request.form.get("redirect_to") or url_for("dashboard", tab="announcements")
+    return redirect(destination)
 
 
 @app.route("/announcements/<announcement_id>/remove", methods=["POST"])
 @login_required
+@require_permission("manage_announcements")
 def remove_announcement(announcement_id):
     global announcements
     announcements = [a for a in announcements if a.get("id") != announcement_id]
@@ -307,6 +481,7 @@ def remove_announcement(announcement_id):
 
 @app.route("/calendar", methods=["POST"])
 @login_required
+@require_permission("manage_calendar")
 def add_calendar_event():
     event = {
         "id": str(uuid.uuid4()),
@@ -319,11 +494,13 @@ def add_calendar_event():
     calendar_events.append(event)
     save_data(calendar_path, calendar_events)
     flash("Evento adicionado", "success")
-    return redirect(url_for("dashboard", tab="calendar"))
+    destination = request.form.get("redirect_to") or url_for("dashboard", tab="calendar")
+    return redirect(destination)
 
 
 @app.route("/departments", methods=["POST"])
 @login_required
+@require_permission("manage_departments")
 def create_department():
     department = {
         "id": str(uuid.uuid4()),
@@ -337,11 +514,13 @@ def create_department():
     departments.append(department)
     save_data(departments_path, departments)
     flash("Departamento criado", "success")
-    return redirect(url_for("dashboard", tab="departments"))
+    destination = request.form.get("redirect_to") or url_for("dashboard", tab="departments")
+    return redirect(destination)
 
 
 @app.route("/departments/<department_id>/queue/<queue_id>/<action>", methods=["POST"])
 @login_required
+@require_permission("approve_departments")
 def decide_queue(department_id, queue_id, action):
     department = next((d for d in departments if d.get("id") == department_id), None)
     if not department:
@@ -353,7 +532,7 @@ def decide_queue(department_id, queue_id, action):
             if action == "approve":
                 request_entry["status"] = "aprovado"
                 request_entry["decided_at"] = datetime.utcnow().isoformat()
-                request_entry["decided_by"] = session.get("user")
+                request_entry["decided_by"] = current_username()
                 department.setdefault("members", []).append(
                     {
                         "name": request_entry.get("name"),
@@ -364,7 +543,7 @@ def decide_queue(department_id, queue_id, action):
             elif action == "reject":
                 request_entry["status"] = "rejeitado"
                 request_entry["decided_at"] = datetime.utcnow().isoformat()
-                request_entry["decided_by"] = session.get("user")
+                request_entry["decided_by"] = current_username()
             break
 
     save_data(departments_path, departments)
@@ -374,6 +553,7 @@ def decide_queue(department_id, queue_id, action):
 
 @app.route("/departments/<department_id>/members", methods=["POST"])
 @login_required
+@require_permission("manage_departments")
 def add_member(department_id):
     department = next((d for d in departments if d.get("id") == department_id), None)
     if not department:
@@ -390,6 +570,85 @@ def add_member(department_id):
     save_data(departments_path, departments)
     flash("Membro adicionado", "success")
     return redirect(url_for("dashboard", tab="departments"))
+
+
+@app.route("/roles", methods=["POST"])
+@login_required
+@require_permission("manage_roles")
+def create_role():
+    role = {
+        "name": request.form.get("name"),
+        "description": request.form.get("description"),
+        "permissions": request.form.getlist("permissions"),
+    }
+    existing = find_role(role.get("name"))
+    if existing:
+        flash("Já existe um cargo com esse nome", "warning")
+        return redirect(url_for("dashboard", tab="settings"))
+    roles.append(role)
+    save_data(roles_path, roles)
+    flash("Cargo criado", "success")
+    destination = request.form.get("redirect_to") or url_for("dashboard", tab="settings")
+    return redirect(destination)
+
+
+@app.route("/users", methods=["POST"])
+@login_required
+@require_permission("manage_users")
+def create_user():
+    username = request.form.get("username")
+    if any(u.get("username") == username for u in users):
+        flash("Usuário já existe", "warning")
+        return redirect(url_for("dashboard", tab="settings"))
+    password = request.form.get("password")
+    user = {
+        "id": str(uuid.uuid4()),
+        "name": request.form.get("name"),
+        "username": username,
+        "role": request.form.get("role"),
+        "password_hash": generate_password_hash(password),
+        "portal_enabled": request.form.get("portal_enabled") == "on",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    users.append(user)
+    save_data(users_path, users)
+    flash("Usuário criado com sucesso", "success")
+    destination = request.form.get("redirect_to") or url_for("dashboard", tab="settings")
+    return redirect(destination)
+
+
+@app.route("/users/<user_id>/role", methods=["POST"])
+@login_required
+@require_permission("manage_roles")
+def update_user_role(user_id):
+    target_role = request.form.get("role")
+    user = next((u for u in users if u.get("id") == user_id), None)
+    if not user:
+        flash("Usuário não encontrado", "danger")
+        return redirect(url_for("dashboard", tab="settings"))
+    if not find_role(target_role):
+        flash("Cargo inválido", "danger")
+        return redirect(url_for("dashboard", tab="settings"))
+    user["role"] = target_role
+    save_data(users_path, users)
+    flash("Permissões atualizadas", "success")
+    destination = request.form.get("redirect_to") or url_for("dashboard", tab="settings")
+    return redirect(destination)
+
+
+@app.route("/users/<user_id>/toggle", methods=["POST"])
+@login_required
+@require_permission("manage_users")
+def toggle_user_access(user_id):
+    user = next((u for u in users if u.get("id") == user_id), None)
+    if not user:
+        flash("Usuário não encontrado", "danger")
+        return redirect(url_for("dashboard", tab="settings"))
+    user["portal_enabled"] = not user.get("portal_enabled", True)
+    save_data(users_path, users)
+    flash("Acesso atualizado", "info")
+    destination = request.form.get("redirect_to") or url_for("dashboard", tab="settings")
+    return redirect(destination)
 
 
 @app.route("/departments/apply/<token>", methods=["GET", "POST"])
@@ -419,6 +678,7 @@ def apply_department(token):
 
 @app.route("/settings", methods=["POST"])
 @login_required
+@require_permission("manage_settings")
 def update_settings():
     site_settings["logo_url"] = request.form.get("logo_url", "")
     site_settings["primary_color"] = request.form.get("primary_color", "#0d6efd")
