@@ -338,7 +338,7 @@ if not departments:
 
 @app.context_processor
 def inject_globals():
-    base_url = f"{config.get('protocol', 'http')}://{config.get('host', 'localhost')}:{config.get('port', 5000)}"
+    base_url = f"{config.get('protocol', 'http')}://{config.get('host', 'localhost')}:{config.get('port', 8445)}"
     return {
         "base_url": base_url,
         "dashboard_tabs": [
@@ -1013,8 +1013,18 @@ def approve_journal(token):
 
 
 if __name__ == "__main__":
+    ssl_context = None
+    cert_path = config.get("ssl_certificate")
+    key_path = config.get("ssl_key")
+    if config.get("protocol") == "https" and cert_path and key_path:
+        if os.path.isfile(cert_path) and os.path.isfile(key_path):
+            ssl_context = (cert_path, key_path)
+        else:
+            print("Aviso: certificados SSL configurados não foram encontrados; iniciando sem HTTPS.")
+
     app.run(
         host="0.0.0.0",
-        port=config.get("port", 5000),
+        port=config.get("port", 8445),
         debug=bool(config.get("debug", False)),
+        ssl_context=ssl_context,
     )

@@ -13,7 +13,8 @@ pip install -r requirements.txt
 2. Ajuste o arquivo `config.json` na raiz para definir:
    - `protocol`: `http` ou `https` (usado para montar os links públicos)
    - `host`: host exposto (por exemplo, `localhost`)
-   - `port`: porta onde o Flask deve iniciar
+   - `port`: porta onde o Flask deve iniciar (padrão **8445**)
+   - `ssl_certificate` e `ssl_key`: caminhos absolutos para os arquivos `.crt/.pem` e `.key` quando usar HTTPS
    - `admin_users`: lista de usuários e senhas de administradores
    - `debug` (opcional): deixe como `false` em produção para evitar logs sensíveis
 
@@ -23,7 +24,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-A aplicação inicia na porta definida em `config.json` e salva uploads nas pastas `uploads/journals` e `uploads/assets`.
+A aplicação inicia na porta definida em `config.json` (por padrão 8445) e salva uploads nas pastas `uploads/journals` e `uploads/assets`. Se `protocol` estiver como `https` e os arquivos informados em `ssl_certificate` e `ssl_key` existirem, o servidor Flask sobe já com TLS habilitado.
 
 ## Estrutura de dados
 - `data/students.json`: fichas dos participantes
