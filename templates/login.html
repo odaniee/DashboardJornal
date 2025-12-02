@@ -5,17 +5,50 @@
     <div class="card shadow-sm">
       <div class="card-body">
         <h1 class="h4 mb-3">Acesso ao painel</h1>
-        <form method="post" action="{{ url_for('login') }}">
-          <div class="mb-3">
-            <label class="form-label" for="username">Usuário</label>
-            <input class="form-control" id="username" name="username" required>
+        <ul class="nav nav-pills mb-3" id="login-tabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab != 'signup' %}active{% endif %}" id="login-tab" data-bs-toggle="pill" data-bs-target="#tab-login" type="button" role="tab">Entrar</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link {% if active_tab == 'signup' %}active{% endif %}" id="signup-tab" data-bs-toggle="pill" data-bs-target="#tab-signup" type="button" role="tab">Criar conta</button>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane fade {% if active_tab != 'signup' %}show active{% endif %}" id="tab-login" role="tabpanel">
+            <form method="post" action="{{ url_for('login') }}">
+              <div class="mb-3">
+                <label class="form-label" for="username">Usuário</label>
+                <input class="form-control" id="username" name="username" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="password">Senha</label>
+                <input class="form-control" id="password" name="password" type="password" required>
+              </div>
+              <button class="btn btn-primary w-100" type="submit">Entrar</button>
+            </form>
           </div>
-          <div class="mb-3">
-            <label class="form-label" for="password">Senha</label>
-            <input class="form-control" id="password" name="password" type="password" required>
+          <div class="tab-pane fade {% if active_tab == 'signup' %}show active{% endif %}" id="tab-signup" role="tabpanel">
+            <form method="post" action="{{ url_for('signup') }}">
+              <div class="mb-3">
+                <label class="form-label" for="name">Nome completo</label>
+                <input class="form-control" id="name" name="name" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="contact">Contato</label>
+                <input class="form-control" id="contact" name="contact" placeholder="E-mail ou telefone">
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="username_signup">Usuário</label>
+                <input class="form-control" id="username_signup" name="username" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="password_signup">Senha</label>
+                <input class="form-control" id="password_signup" name="password" type="password" required>
+              </div>
+              <button class="btn btn-primary w-100" type="submit">Enviar para aprovação</button>
+            </form>
           </div>
-          <button class="btn btn-primary w-100" type="submit">Entrar</button>
-        </form>
+        </div>
       </div>
     </div>
   </div>

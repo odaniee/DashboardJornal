@@ -1,11 +1,15 @@
 {
-  "protocol": "http",
-  "host": "localhost",
+  "protocol": "https",
+  "host": "sistemaorion.redirectme.net",
   "port": 8445,
+  "public_base_url": "https://sistemaorion.redirectme.net:8445",
   "ssl_certificate": "",
   "ssl_key": "",
   "debug": false,
   "admin_users": [
-    { "username": "admin", "password": "admin123" }
+    {
+      "username": "admin",
+      "password_hash": "scrypt:32768:8:1$SDW908M9b4HHtQPL$1a452ae6ef287eeea1447d9ed7196f5ed3902e5149c750038a8cfaf7ea21f3665836633c3d961d4258fdabb767cd89384a9253187666ad00c34842cffef3cb88"
+    }
   ]
 }
