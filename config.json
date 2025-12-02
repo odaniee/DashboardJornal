@@ -1,7 +1,8 @@
 {
-  "protocol": "http",
-  "host": "localhost",
+  "protocol": "https",
+  "host": "sistemaorion.redirectme.net",
   "port": 8445,
+  "public_base_url": "https://sistemaorion.redirectme.net:8445",
   "ssl_certificate": "",
   "ssl_key": "",
   "debug": false,

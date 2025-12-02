@@ -75,45 +75,6 @@ DEFAULT_WIDGETS = [
     },
 ]
 
-DEFAULT_WIDGETS = [
-    {
-        "id": "welcome",
-        "title": "Boas-vindas",
-        "enabled": True,
-        "type": "text",
-        "subtitle": "Orientação rápida",
-        "content": "Use as guias para organizar o jornal e mantenha as permissões em dia.",
-    },
-    {
-        "id": "students",
-        "title": "Equipe ativa",
-        "enabled": True,
-        "type": "metric",
-        "subtitle": "Fichas cadastradas",
-    },
-    {
-        "id": "tickets",
-        "title": "Tickets abertos",
-        "enabled": True,
-        "type": "metric",
-        "subtitle": "Chamados aguardando resposta",
-    },
-    {
-        "id": "agenda",
-        "title": "Próximo evento",
-        "enabled": True,
-        "type": "event",
-        "subtitle": "Calendário geral",
-    },
-    {
-        "id": "departments",
-        "title": "Filas de departamentos",
-        "enabled": True,
-        "type": "metric",
-        "subtitle": "Pedidos para aprovar",
-    },
-]
-
 
 def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as config_file:
@@ -184,6 +145,40 @@ def allowed_file(filename, allowed_extensions):
     if not filename or "." not in filename:
         return False
     return filename.rsplit(".", 1)[1].lower() in allowed_extensions
+
+
+def find_user_by_username(username):
+    return next((u for u in users if u.get("username") == username), None)
+
+
+def link_portal_user(student, username, password, role_name, enabled=True):
+    if not username:
+        raise ValueError("Informe um usuário para o portal")
+    existing = find_user_by_username(username)
+    if existing and existing.get("id") != student.get("user_id"):
+        raise ValueError("Usuário já existe. Escolha outro nome de usuário.")
+    if student.get("user_id"):
+        user = next((u for u in users if u.get("id") == student.get("user_id")), None)
+    else:
+        user = None
+    if user is None:
+        user = {"id": str(uuid.uuid4()), "created_at": datetime.utcnow().isoformat()}
+        users.append(user)
+    user.update(
+        {
+            "name": student.get("name"),
+            "username": username,
+            "role": role_name,
+            "password_hash": generate_password_hash(password) if password else user.get("password_hash"),
+            "portal_enabled": enabled,
+            "linked_student_id": student.get("id"),
+        }
+    )
+    if password is None and not user.get("password_hash"):
+        raise ValueError("Defina uma senha para o portal")
+    student["user_id"] = user.get("id")
+    save_data(users_path, users)
+    return user
 
 
 config = ensure_admin_password_hashes(load_config())
@@ -377,6 +372,10 @@ for asset in assets:
     asset.setdefault("owner", "")
     asset.setdefault("department_id", None)
 
+for student in students:
+    student.setdefault("department_id", None)
+    student.setdefault("user_id", None)
+
 for role in roles:
     permissions = role.setdefault("permissions", [])
     if role.get("name") in {"Administrador", "Gerente", "Diretor de Departamento"}:
@@ -400,11 +399,25 @@ if not departments:
 
 
 @app.context_processor
+def public_base_url():
+    configured = config.get("public_base_url")
+    if configured:
+        return configured.rstrip("/")
+    proto = config.get("protocol", "http")
+    host = config.get("host", "localhost")
+    port = config.get("port", 8445)
+    default_port = 443 if proto == "https" else 80
+    if port == default_port:
+        return f"{proto}://{host}"
+    return f"{proto}://{host}:{port}"
+
+
 def inject_globals():
-    base_url = f"{config.get('protocol', 'http')}://{config.get('host', 'localhost')}:{config.get('port', 8445)}"
+    base_url = public_base_url()
     user = current_user()
     user_permissions = user.get("permissions", []) if user else []
     tabs = [
+        ("home", "Página Principal"),
         ("students", "Funcionários"),
         ("journals", "Jornais"),
         ("assets", "Arquivos"),
@@ -540,7 +553,7 @@ def dashboard():
     if not site_settings.get("onboarding_done"):
         return redirect(url_for("welcome"))
 
-    tab = request.args.get("tab", "students")
+    tab = request.args.get("tab", "home")
     sorted_students = sorted(students, key=lambda s: s.get("name", "").lower())
     sorted_journals = sorted(
         journals, key=lambda j: j.get("release_date", ""), reverse=True
@@ -566,6 +579,19 @@ def dashboard():
         )
     widget_cards = build_widget_cards()
     widget_config = normalized_widgets()
+    journal_dates = [
+        datetime.fromisoformat(j.get("release_date"))
+        for j in journals
+        if j.get("release_date")
+    ]
+    journal_dates = sorted(journal_dates)
+    cadence_days = None
+    if len(journal_dates) >= 2:
+        gaps = [
+            (journal_dates[i] - journal_dates[i - 1]).days
+            for i in range(1, len(journal_dates))
+        ]
+        cadence_days = round(sum(gaps) / len(gaps), 1)
     return render_template(
         "dashboard.html",
         current_tab=tab,
@@ -583,6 +609,7 @@ def dashboard():
         reasons=REASONS,
         widget_cards=widget_cards,
         widget_config=widget_config,
+        cadence_days=cadence_days,
     )
 
 
@@ -608,9 +635,37 @@ def create_student():
         "portal_enabled": request.form.get("portal_enabled") == "on",
         "created_at": datetime.utcnow().isoformat(),
         "photo": photo_filename,
+        "department_id": request.form.get("department_id") or None,
+        "user_id": None,
     }
+    if student.get("department_id"):
+        department = next(
+            (d for d in departments if d.get("id") == student.get("department_id")), None
+        )
+        if department:
+            department.setdefault("members", []).append(
+                {
+                    "name": student.get("name"),
+                    "role": student.get("role"),
+                    "joined_at": datetime.utcnow().isoformat(),
+                }
+            )
+            save_data(departments_path, departments)
+
     students.append(student)
     save_data(students_path, students)
+
+    if student.get("portal_enabled"):
+        username = request.form.get("portal_username")
+        password = request.form.get("portal_password")
+        role_name = request.form.get("portal_role") or "Colaborador"
+        try:
+            link_portal_user(student, username, password, role_name, enabled=True)
+        except ValueError as err:
+            flash(str(err), "danger")
+            return redirect(url_for("dashboard", tab="students"))
+        save_data(students_path, students)
+
     flash("Ficha de participante criada", "success")
     destination = request.form.get("redirect_to") or url_for("dashboard", tab="students")
     return redirect(destination)
@@ -622,7 +677,19 @@ def create_student():
 def toggle_student(student_id):
     for student in students:
         if student.get("id") == student_id:
-            student["portal_enabled"] = not student.get("portal_enabled", False)
+            desired = not student.get("portal_enabled", False)
+            if desired and not student.get("user_id"):
+                flash(
+                    "Configure usuário e senha antes de liberar o portal.",
+                    "danger",
+                )
+                break
+            student["portal_enabled"] = desired
+            if student.get("user_id"):
+                user = next((u for u in users if u.get("id") == student.get("user_id")), None)
+                if user:
+                    user["portal_enabled"] = desired
+                    save_data(users_path, users)
             save_data(students_path, students)
             flash("Permissão de portal atualizada", "info")
             break
@@ -634,10 +701,117 @@ def toggle_student(student_id):
 @require_permission("manage_students")
 def delete_student(student_id):
     global students
+    student = next((s for s in students if s.get("id") == student_id), None)
+    if student and student.get("user_id"):
+        linked_user = next((u for u in users if u.get("id") == student.get("user_id")), None)
+        if linked_user:
+            users.remove(linked_user)
+            save_data(users_path, users)
+    if student and student.get("department_id"):
+        department = next((d for d in departments if d.get("id") == student.get("department_id")), None)
+        if department:
+            department["members"] = [
+                m for m in department.get("members", []) if m.get("name") != student.get("name")
+            ]
+            save_data(departments_path, departments)
     students = [s for s in students if s.get("id") != student_id]
     save_data(students_path, students)
     flash("Funcionário removido", "info")
     return redirect(url_for("dashboard", tab="students"))
+
+
+@app.route("/students/<student_id>/update", methods=["POST"])
+@login_required
+@require_permission("manage_students")
+def update_student(student_id):
+    student = next((s for s in students if s.get("id") == student_id), None)
+    if not student:
+        flash("Funcionário não encontrado", "danger")
+        return redirect(url_for("dashboard", tab="students"))
+
+    previous_department = student.get("department_id")
+    student["name"] = request.form.get("name") or student.get("name")
+    student["role"] = request.form.get("role")
+    student["contact"] = request.form.get("contact")
+    student["notes"] = request.form.get("notes")
+    student["department_id"] = request.form.get("department_id") or None
+
+    if previous_department != student.get("department_id"):
+        if previous_department:
+            old_department = next(
+                (d for d in departments if d.get("id") == previous_department), None
+            )
+            if old_department:
+                old_department["members"] = [
+                    m for m in old_department.get("members", []) if m.get("name") != student.get("name")
+                ]
+                save_data(departments_path, departments)
+        if student.get("department_id"):
+            new_dep = next(
+                (d for d in departments if d.get("id") == student.get("department_id")), None
+            )
+            if new_dep:
+                new_dep.setdefault("members", []).append(
+                    {
+                        "name": student.get("name"),
+                        "role": student.get("role"),
+                        "joined_at": datetime.utcnow().isoformat(),
+                    }
+                )
+                save_data(departments_path, departments)
+
+    if request.form.get("portal_enabled") == "on":
+        student["portal_enabled"] = True
+        username = request.form.get("portal_username")
+        password = request.form.get("portal_password") or None
+        role_name = request.form.get("portal_role") or "Colaborador"
+        try:
+            link_portal_user(
+                student,
+                username=username,
+                password=password,
+                role_name=role_name,
+                enabled=True,
+            )
+        except ValueError as err:
+            flash(str(err), "danger")
+            return redirect(url_for("dashboard", tab="students"))
+    else:
+        student["portal_enabled"] = False
+        if student.get("user_id"):
+            user = next((u for u in users if u.get("id") == student.get("user_id")), None)
+            if user:
+                user["portal_enabled"] = False
+                save_data(users_path, users)
+
+    save_data(students_path, students)
+    flash("Ficha atualizada", "success")
+    return redirect(url_for("dashboard", tab="students"))
+
+
+@app.route("/students/<student_id>/print")
+@login_required
+@require_permission("manage_students")
+def print_student(student_id):
+    student = next((s for s in students if s.get("id") == student_id), None)
+    if not student:
+        flash("Funcionário não encontrado", "danger")
+        return redirect(url_for("dashboard", tab="students"))
+    department = next(
+        (d for d in departments if d.get("id") == student.get("department_id")), None
+    )
+    return render_template("print_student.html", student=student, department=department)
+
+
+@app.route("/students/print/all")
+@login_required
+@require_permission("manage_students")
+def print_all_students():
+    enriched = []
+    for s in students:
+        dept = next((d for d in departments if d.get("id") == s.get("department_id")), None)
+        enriched.append({"data": s, "department": dept})
+    return render_template("print_all_students.html", students=enriched)
 
 
 @app.route("/journals", methods=["POST"])
@@ -1067,6 +1241,51 @@ def toggle_user_access(user_id):
     return redirect(destination)
 
 
+@app.route("/users/<user_id>/update", methods=["POST"])
+@login_required
+@require_permission("manage_users")
+def update_user(user_id):
+    user = next((u for u in users if u.get("id") == user_id), None)
+    if not user:
+        flash("Usuário não encontrado", "danger")
+        return redirect(url_for("dashboard", tab="settings"))
+    new_username = request.form.get("username")
+    if new_username and new_username != user.get("username"):
+        if find_user_by_username(new_username):
+            flash("Outro usuário já utiliza esse login", "danger")
+            return redirect(url_for("dashboard", tab="settings"))
+        user["username"] = new_username
+    user["name"] = request.form.get("name") or user.get("name")
+    new_role = request.form.get("role") or user.get("role")
+    if not find_role(new_role):
+        flash("Cargo inválido", "danger")
+        return redirect(url_for("dashboard", tab="settings"))
+    user["role"] = new_role
+    password = request.form.get("password") or None
+    if password:
+        user["password_hash"] = generate_password_hash(password)
+    user["portal_enabled"] = request.form.get("portal_enabled") == "on"
+    save_data(users_path, users)
+    flash("Usuário atualizado", "success")
+    return redirect(url_for("dashboard", tab="settings"))
+
+
+@app.route("/users/<user_id>/delete", methods=["POST"])
+@login_required
+@require_permission("manage_users")
+def delete_user(user_id):
+    global users
+    users = [u for u in users if u.get("id") != user_id]
+    for student in students:
+        if student.get("user_id") == user_id:
+            student["user_id"] = None
+            student["portal_enabled"] = False
+    save_data(users_path, users)
+    save_data(students_path, students)
+    flash("Usuário removido", "info")
+    return redirect(url_for("dashboard", tab="settings"))
+
+
 @app.route("/departments/apply/<token>", methods=["GET", "POST"])
 def apply_department(token):
     department = next((d for d in departments if d.get("join_token") == token), None)
@@ -1162,11 +1381,14 @@ if __name__ == "__main__":
     ssl_context = None
     cert_path = config.get("ssl_certificate")
     key_path = config.get("ssl_key")
-    if config.get("protocol") == "https" and cert_path and key_path:
-        if os.path.isfile(cert_path) and os.path.isfile(key_path):
+    if config.get("protocol") == "https":
+        if cert_path and key_path and os.path.isfile(cert_path) and os.path.isfile(key_path):
             ssl_context = (cert_path, key_path)
         else:
-            print("Aviso: certificados SSL configurados não foram encontrados; iniciando sem HTTPS.")
+            ssl_context = "adhoc"
+            print(
+                "Aviso: certificados SSL não encontrados. Gerando certificado temporário para HTTPS."
+            )
 
     app.run(
         host="0.0.0.0",
