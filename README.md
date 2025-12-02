@@ -4,10 +4,10 @@ Portal web simples para organizar fichas de participantes, submissão de jornais
 
 ## Configuração
 
-1. Instale as dependências:
+1. Instale as dependências (se o erro `No module named 'flask'` aparecer, rode o comando abaixo para instalar tudo de uma vez):
 
 ```bash
-pip install -r requirements.txt
+./install.sh
 ```
 
 2. Ajuste o arquivo `config.json` na raiz para definir:
