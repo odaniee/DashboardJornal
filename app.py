@@ -172,6 +172,7 @@ def link_portal_user(student, username, password, role_name, enabled=True):
             "password_hash": generate_password_hash(password) if password else user.get("password_hash"),
             "portal_enabled": enabled,
             "linked_student_id": student.get("id"),
+            "status": student.get("status", "approved"),
         }
     )
     if password is None and not user.get("password_hash"):
@@ -375,6 +376,9 @@ for asset in assets:
 for student in students:
     student.setdefault("department_id", None)
     student.setdefault("user_id", None)
+    student.setdefault("status", "approved")
+    if student.get("status") != "approved":
+        student.setdefault("portal_enabled", False)
 
 for role in roles:
     permissions = role.setdefault("permissions", [])
@@ -382,6 +386,13 @@ for role in roles:
         if "manage_tickets" not in permissions:
             permissions.append("manage_tickets")
 save_data(roles_path, roles)
+
+for user in users:
+    user.setdefault("status", "approved")
+    if user.get("status") != "approved":
+        user.setdefault("portal_enabled", False)
+save_data(users_path, users)
+save_data(students_path, students)
 
 if not departments:
     departments.append(
@@ -476,6 +487,7 @@ def index():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    active_tab = request.args.get("tab", "login")
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
@@ -494,7 +506,13 @@ def login():
                     return redirect(url_for("dashboard"))
 
         for user in users:
-            if user.get("username") == username and user.get("portal_enabled", True):
+            if user.get("username") == username:
+                if user.get("status") != "approved":
+                    flash("Conta aguardando aprovação do administrador", "warning")
+                    return render_template("login.html", active_tab=active_tab)
+                if not user.get("portal_enabled", True):
+                    flash("Acesso ao portal bloqueado. Fale com um administrador.", "danger")
+                    return render_template("login.html", active_tab=active_tab)
                 if check_password_hash(user.get("password_hash", ""), password):
                     perms = permissions_for_role(user.get("role"))
                     session["user"] = {
@@ -507,7 +525,58 @@ def login():
 
         flash("Usuário ou senha inválidos ou acesso bloqueado", "danger")
 
-    return render_template("login.html")
+    return render_template("login.html", active_tab=active_tab)
+
+
+@app.route("/signup", methods=["POST"])
+def signup():
+    name = request.form.get("name")
+    username = request.form.get("username")
+    password = request.form.get("password")
+    contact = request.form.get("contact")
+
+    if not all([name, username, password]):
+        flash("Preencha nome, usuário e senha para solicitar acesso", "warning")
+        return redirect(url_for("login", tab="signup"))
+
+    if find_user_by_username(username):
+        flash("Usuário já existe ou está em aprovação", "danger")
+        return redirect(url_for("login", tab="signup"))
+
+    student_id = str(uuid.uuid4())
+    student = {
+        "id": student_id,
+        "name": name,
+        "role": "",
+        "contact": contact,
+        "notes": "Pedido vindo do portal",
+        "portal_enabled": False,
+        "created_at": datetime.utcnow().isoformat(),
+        "photo": None,
+        "department_id": None,
+        "user_id": None,
+        "status": "pending",
+    }
+    students.append(student)
+
+    user = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "username": username,
+        "role": "Colaborador",
+        "password_hash": generate_password_hash(password),
+        "portal_enabled": False,
+        "linked_student_id": student_id,
+        "created_at": datetime.utcnow().isoformat(),
+        "status": "pending",
+    }
+    student["user_id"] = user["id"]
+    users.append(user)
+    save_data(users_path, users)
+    save_data(students_path, students)
+
+    flash("Cadastro enviado para aprovação. Aguarde a liberação do administrador.", "info")
+    return redirect(url_for("login"))
 
 
 @app.route("/logout")
@@ -555,6 +624,8 @@ def dashboard():
 
     tab = request.args.get("tab", "home")
     sorted_students = sorted(students, key=lambda s: s.get("name", "").lower())
+    pending_students = [s for s in sorted_students if s.get("status") != "approved"]
+    approved_students = [s for s in sorted_students if s.get("status") == "approved"]
     sorted_journals = sorted(
         journals, key=lambda j: j.get("release_date", ""), reverse=True
     )
@@ -596,6 +667,8 @@ def dashboard():
         "dashboard.html",
         current_tab=tab,
         students=sorted_students,
+        approved_students=approved_students,
+        pending_students=pending_students,
         journals=sorted_journals,
         assets=sorted_assets,
         rules=rules,
@@ -632,6 +705,7 @@ def create_student():
         "role": request.form.get("role"),
         "contact": request.form.get("contact"),
         "notes": request.form.get("notes"),
+        "status": "approved",
         "portal_enabled": request.form.get("portal_enabled") == "on",
         "created_at": datetime.utcnow().isoformat(),
         "photo": photo_filename,
@@ -678,6 +752,9 @@ def toggle_student(student_id):
     for student in students:
         if student.get("id") == student_id:
             desired = not student.get("portal_enabled", False)
+            if student.get("status") != "approved" and desired:
+                flash("Aprove o cadastro antes de liberar o portal.", "warning")
+                break
             if desired and not student.get("user_id"):
                 flash(
                     "Configure usuário e senha antes de liberar o portal.",
@@ -730,6 +807,11 @@ def update_student(student_id):
         return redirect(url_for("dashboard", tab="students"))
 
     previous_department = student.get("department_id")
+    requested_status = request.form.get("status") or student.get("status", "approved")
+    allowed_status = {"approved", "pending", "rejected"}
+    if requested_status not in allowed_status:
+        requested_status = student.get("status", "approved")
+    student["status"] = requested_status
     student["name"] = request.form.get("name") or student.get("name")
     student["role"] = request.form.get("role")
     student["contact"] = request.form.get("contact")
@@ -760,29 +842,36 @@ def update_student(student_id):
                 )
                 save_data(departments_path, departments)
 
-    if request.form.get("portal_enabled") == "on":
-        student["portal_enabled"] = True
-        username = request.form.get("portal_username")
-        password = request.form.get("portal_password") or None
-        role_name = request.form.get("portal_role") or "Colaborador"
+    desired_portal = request.form.get("portal_enabled") == "on" and requested_status == "approved"
+    existing_user = (
+        next((u for u in users if u.get("id") == student.get("user_id")), None)
+        if student.get("user_id")
+        else None
+    )
+    username = request.form.get("portal_username") or (existing_user.get("username") if existing_user else None)
+    password = request.form.get("portal_password") or None
+    role_name = request.form.get("portal_role") or (existing_user.get("role") if existing_user else "Colaborador")
+
+    if username or password or existing_user or desired_portal:
         try:
             link_portal_user(
                 student,
                 username=username,
                 password=password,
                 role_name=role_name,
-                enabled=True,
+                enabled=desired_portal,
             )
         except ValueError as err:
             flash(str(err), "danger")
             return redirect(url_for("dashboard", tab="students"))
-    else:
-        student["portal_enabled"] = False
-        if student.get("user_id"):
-            user = next((u for u in users if u.get("id") == student.get("user_id")), None)
-            if user:
+    student["portal_enabled"] = desired_portal if requested_status == "approved" else False
+    if student.get("user_id"):
+        user = next((u for u in users if u.get("id") == student.get("user_id")), None)
+        if user:
+            user["status"] = requested_status
+            if requested_status != "approved":
                 user["portal_enabled"] = False
-                save_data(users_path, users)
+            save_data(users_path, users)
 
     save_data(students_path, students)
     flash("Ficha atualizada", "success")
@@ -809,6 +898,8 @@ def print_student(student_id):
 def print_all_students():
     enriched = []
     for s in students:
+        if s.get("status") != "approved":
+            continue
         dept = next((d for d in departments if d.get("id") == s.get("department_id")), None)
         enriched.append({"data": s, "department": dept})
     return render_template("print_all_students.html", students=enriched)
