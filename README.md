@@ -4,7 +4,7 @@ Portal web simples para organizar fichas de participantes, submissão de jornais
 
 ## Configuração
 
-1. Instale as dependências (se o erro `No module named 'flask'` aparecer, rode o comando abaixo para instalar tudo de uma vez):
+1. Instale as dependências (se o erro `No module named 'flask'` aparecer, rode o comando abaixo para instalar tudo de uma vez). O pacote `cryptography` já é instalado automaticamente e é usado para gerar um certificado temporário quando você pedir HTTPS sem fornecer arquivos reais:
 
 ```bash
 ./install.sh
@@ -27,7 +27,7 @@ A aplicação inicia na porta definida em `config.json` e salva uploads nas past
 
 ## Adicionando seu certificado SSL
 
-1. Coloque seus arquivos de certificado e chave em uma pasta local (por exemplo `certs/`). Os arquivos reais são ignorados pelo git.
+1. Coloque seus arquivos de certificado (normalmente `.crt` ou `.pem`) e sua chave privada (`.key`) em uma pasta local (por exemplo `certs/`). Os arquivos reais são ignorados pelo git.
 2. Atualize o `config.json` para apontar para esses caminhos quando `protocol` estiver como `https`:
 
 ```json
@@ -39,7 +39,7 @@ A aplicação inicia na porta definida em `config.json` e salva uploads nas past
 }
 ```
 
-3. Inicie a aplicação normalmente (`python app.py`). Se os caminhos existirem, o Flask usará seu certificado; se estiverem vazios ou inválidos, ele gera um certificado temporário apenas para testes.
+3. Inicie a aplicação normalmente (`python app.py`). Se os caminhos existirem, o Flask usará seu certificado; se estiverem vazios ou inválidos e o pacote `cryptography` estiver instalado, ele gera um certificado temporário apenas para testes. Caso contrário, o servidor volta para HTTP automaticamente e exibirá um aviso.
 
 ## Funcionalidades
 

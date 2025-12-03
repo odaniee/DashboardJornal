@@ -1476,10 +1476,18 @@ if __name__ == "__main__":
         if cert_path and key_path and os.path.isfile(cert_path) and os.path.isfile(key_path):
             ssl_context = (cert_path, key_path)
         else:
-            ssl_context = "adhoc"
-            print(
-                "Aviso: certificados SSL não encontrados. Gerando certificado temporário para HTTPS."
-            )
+            try:
+                import cryptography  # noqa: F401
+
+                ssl_context = "adhoc"
+                print(
+                    "Aviso: certificados SSL não encontrados. Gerando certificado temporário para HTTPS."
+                )
+            except Exception:
+                ssl_context = None
+                print(
+                    "Aviso: HTTPS solicitado mas não foi possível gerar certificado temporário (pacote 'cryptography' ausente). Iniciando em HTTP; adicione seus arquivos reais ou instale 'cryptography' para usar HTTPS."
+                )
 
     app.run(
         host="0.0.0.0",
