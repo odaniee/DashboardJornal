@@ -5,6 +5,8 @@
   "public_base_url": "https://sistemaorion.redirectme.net:8445",
   "ssl_certificate": "",
   "ssl_key": "",
+  "ssl_pkcs12": "",
+  "ssl_pkcs12_password": "",
   "debug": false,
   "admin_users": [
     {

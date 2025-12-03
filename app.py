@@ -1,5 +1,8 @@
+import atexit
 import json
 import os
+import ssl
+import tempfile
 import uuid
 from datetime import datetime
 from functools import wraps
@@ -1472,8 +1475,67 @@ if __name__ == "__main__":
     ssl_context = None
     cert_path = config.get("ssl_certificate")
     key_path = config.get("ssl_key")
+    pkcs12_path = config.get("ssl_pkcs12")
+    pkcs12_password = config.get("ssl_pkcs12_password") or os.getenv("SSL_PKCS12_PASSWORD")
+    temporary_cert_files = []
+
+    def cleanup_temp_certs():
+        for temp_path in temporary_cert_files:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
     if config.get("protocol") == "https":
-        if cert_path and key_path and os.path.isfile(cert_path) and os.path.isfile(key_path):
+        if pkcs12_path and os.path.isfile(pkcs12_path):
+            try:
+                from cryptography.hazmat.primitives import serialization
+                from cryptography.hazmat.primitives.serialization.pkcs12 import (
+                    load_key_and_certificates,
+                )
+
+                with open(pkcs12_path, "rb") as pkcs12_file:
+                    pkcs12_data = pkcs12_file.read()
+
+                key, cert, additional_certs = load_key_and_certificates(
+                    pkcs12_data,
+                    pkcs12_password.encode() if pkcs12_password else None,
+                )
+
+                if key and cert:
+                    cert_bytes = cert.public_bytes(serialization.Encoding.PEM)
+                    chain_bytes = b"".join(
+                        c.public_bytes(serialization.Encoding.PEM)
+                        for c in (additional_certs or [])
+                    )
+                    key_bytes = key.private_bytes(
+                        serialization.Encoding.PEM,
+                        serialization.PrivateFormat.PKCS8,
+                        serialization.NoEncryption(),
+                    )
+
+                    cert_temp = tempfile.NamedTemporaryFile(delete=False)
+                    key_temp = tempfile.NamedTemporaryFile(delete=False)
+                    cert_temp.write(cert_bytes + chain_bytes)
+                    cert_temp.flush()
+                    key_temp.write(key_bytes)
+                    key_temp.flush()
+                    temporary_cert_files.extend([cert_temp.name, key_temp.name])
+
+                    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                    ssl_context.load_cert_chain(
+                        certfile=cert_temp.name,
+                        keyfile=key_temp.name,
+                    )
+                    atexit.register(cleanup_temp_certs)
+                else:
+                    print(
+                        "Certificado PKCS#12 inválido: chave ou certificado ausentes."
+                    )
+            except Exception as exc:
+                ssl_context = None
+                print(f"Erro ao carregar PKCS#12: {exc}")
+        elif cert_path and key_path and os.path.isfile(cert_path) and os.path.isfile(key_path):
             ssl_context = (cert_path, key_path)
         else:
             try:
@@ -1486,7 +1548,8 @@ if __name__ == "__main__":
             except Exception:
                 ssl_context = None
                 print(
-                    "Aviso: HTTPS solicitado mas não foi possível gerar certificado temporário (pacote 'cryptography' ausente). Iniciando em HTTP; adicione seus arquivos reais ou instale 'cryptography' para usar HTTPS."
+                    "Aviso: HTTPS solicitado mas não foi possível gerar certificado temporário (pacote 'cryptography' ausente).\n"
+                    "Iniciando em HTTP; adicione seus arquivos reais ou instale 'cryptography' para usar HTTPS."
                 )
 
     app.run(
