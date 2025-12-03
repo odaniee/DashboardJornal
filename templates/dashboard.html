@@ -8,27 +8,77 @@
   {% endfor %}
 </ul>
 
-{% if widget_cards %}
-  <div class="row g-3 mb-4">
-    {% for widget in widget_cards %}
-    <div class="col-sm-6 col-lg-3">
-      <div class="card widget-card shadow-sm h-100">
+{% if current_tab == 'home' %}
+  {% if widget_cards %}
+    <div class="row g-3 mb-4">
+      {% for widget in widget_cards %}
+      <div class="col-sm-6 col-lg-3">
+        <div class="card widget-card shadow-sm h-100">
+          <div class="card-body">
+            <p class="text-muted small mb-1">{{ widget.subtitle }}</p>
+            <h3 class="h6 fw-bold">{{ widget.title }}</h3>
+            {% if widget.type == 'metric' %}
+              <div class="display-6 fw-semibold text-primary">{{ widget.value }}</div>
+              <div class="small text-muted">{{ widget.helper }}</div>
+            {% elif widget.type == 'event' %}
+              <div class="fw-semibold">{{ widget.value }}</div>
+              <div class="small text-muted">{{ widget.helper }}</div>
+            {% else %}
+              <div class="small text-muted">{{ widget.content or widget.helper }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
         <div class="card-body">
-          <p class="text-muted small mb-1">{{ widget.subtitle }}</p>
-          <h3 class="h6 fw-bold">{{ widget.title }}</h3>
-          {% if widget.type == 'metric' %}
-            <div class="display-6 fw-semibold text-primary">{{ widget.value }}</div>
-            <div class="small text-muted">{{ widget.helper }}</div>
-          {% elif widget.type == 'event' %}
-            <div class="fw-semibold">{{ widget.value }}</div>
-            <div class="small text-muted">{{ widget.helper }}</div>
+          <h2 class="h5">Jornais e frequência</h2>
+          {% if cadence_days %}
+            <p class="mb-1 small text-muted">Frequência média de lançamento: {{ cadence_days }} dias</p>
           {% else %}
-            <div class="small text-muted">{{ widget.content or widget.helper }}</div>
+            <p class="mb-1 small text-muted">Cadastre pelo menos dois jornais para calcular a frequência.</p>
           {% endif %}
+          <ul class="list-group list-group-flush mt-3">
+            {% for journal in journals[:3] %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">{{ journal.title }}</div>
+                  <div class="small text-muted">{{ journal.edition }} · {{ journal.release_date }}</div>
+                </div>
+                <span class="badge bg-secondary">{{ journal.status }}</span>
+              </li>
+            {% else %}
+              <li class="list-group-item text-muted">Sem jornais cadastrados.</li>
+            {% endfor %}
+          </ul>
         </div>
       </div>
     </div>
-    {% endfor %}
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h2 class="h5">Calendário</h2>
+          <ul class="list-group list-group-flush">
+            {% for event in calendar_events %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">{{ event.title }}</div>
+                  <div class="small text-muted">{{ event.date }} · {{ event.description }}</div>
+                </div>
+                <span class="badge bg-light text-dark">{{ event.category }}</span>
+              </li>
+            {% else %}
+              <li class="list-group-item text-muted">Nenhum evento no calendário.</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
   </div>
 {% endif %}
 
@@ -38,7 +88,7 @@
       <div class="card h-100 shadow-sm">
         <div class="card-body">
           <h2 class="h5">Nova ficha</h2>
-          <form method="post" action="{{ url_for('create_student') }}">
+          <form method="post" action="{{ url_for('create_student') }}" enctype="multipart/form-data">
             <div class="mb-3">
               <label class="form-label" for="name">Nome</label>
               <input class="form-control" id="name" name="name" required>
@@ -46,6 +96,19 @@
             <div class="mb-3">
               <label class="form-label" for="role">Função no jornal</label>
               <input class="form-control" id="role" name="role" placeholder="Repórter, editor, revisor...">
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="department_id">Departamento</label>
+              <select class="form-select" id="department_id" name="department_id">
+                <option value="">Não vinculado</option>
+                {% for department in departments %}
+                  <option value="{{ department.id }}">{{ department.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="photo">Foto</label>
+              <input class="form-control" type="file" id="photo" name="photo" accept="image/*">
             </div>
             <div class="mb-3">
               <label class="form-label" for="contact">Contato</label>
@@ -59,43 +122,220 @@
               <input class="form-check-input" type="checkbox" id="portal_enabled" name="portal_enabled" checked>
               <label class="form-check-label" for="portal_enabled">Habilitar acesso ao portal</label>
             </div>
+            <div class="row mb-3">
+              <div class="col-sm-6">
+                <label class="form-label" for="portal_username">Usuário do portal</label>
+                <input class="form-control" id="portal_username" name="portal_username" placeholder="login">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label" for="portal_password">Senha inicial</label>
+                <input class="form-control" type="password" id="portal_password" name="portal_password" placeholder="Defina uma senha">
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="portal_role">Permissão</label>
+              <select class="form-select" id="portal_role" name="portal_role">
+                {% for role in roles %}
+                  <option value="{{ role.name }}">{{ role.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
             <button class="btn btn-primary" type="submit">Salvar ficha</button>
           </form>
         </div>
       </div>
     </div>
     <div class="col-lg-7">
+      {% if pending_students %}
+      <div class="card shadow-sm mb-3 border-warning">
+        <div class="card-body">
+          <h2 class="h6 text-warning">Solicitações aguardando aprovação</h2>
+          <div class="d-flex flex-column gap-3">
+            {% for student in pending_students %}
+            <div class="card border-warning">
+              <div class="card-body">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    <h3 class="h6 mb-1">{{ student.name }}</h3>
+                    <p class="small mb-1 text-muted">Solicitado por {{ student.contact or 'Contato não informado' }}</p>
+                    <p class="small mb-2">Status: {{ student.status }}</p>
+                  </div>
+                  <span class="badge bg-warning text-dark">Pendente</span>
+                </div>
+                <form class="row g-2" method="post" action="{{ url_for('update_student', student_id=student.id) }}">
+                  <input type="hidden" name="status" value="approved">
+                  <div class="col-md-6">
+                    <label class="form-label small" for="name_pending_{{ student.id }}">Nome</label>
+                    <input class="form-control form-control-sm" id="name_pending_{{ student.id }}" name="name" value="{{ student.name }}" required>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small" for="role_pending_{{ student.id }}">Função</label>
+                    <input class="form-control form-control-sm" id="role_pending_{{ student.id }}" name="role" value="{{ student.role }}" placeholder="Cargo ou atuação">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small" for="dept_pending_{{ student.id }}">Departamento</label>
+                    <select class="form-select form-select-sm" id="dept_pending_{{ student.id }}" name="department_id">
+                      <option value="">Sem vínculo</option>
+                      {% for department in departments %}
+                        <option value="{{ department.id }}" {% if department.id == student.department_id %}selected{% endif %}>{{ department.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small" for="contact_pending_{{ student.id }}">Contato</label>
+                    <input class="form-control form-control-sm" id="contact_pending_{{ student.id }}" name="contact" value="{{ student.contact }}" placeholder="E-mail ou telefone">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small" for="portal_username_pending_{{ student.id }}">Usuário do portal</label>
+                    {% set pending_user = users|selectattr('id', 'equalto', student.user_id)|first %}
+                    <input class="form-control form-control-sm" id="portal_username_pending_{{ student.id }}" name="portal_username" value="{{ pending_user.username if pending_user else '' }}" required>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small" for="portal_password_pending_{{ student.id }}">Definir senha</label>
+                    <input class="form-control form-control-sm" type="password" id="portal_password_pending_{{ student.id }}" name="portal_password" placeholder="Senha provisória" required>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small" for="portal_role_pending_{{ student.id }}">Permissão</label>
+                    <select class="form-select form-select-sm" id="portal_role_pending_{{ student.id }}" name="portal_role">
+                      {% for role in roles %}
+                        <option value="{{ role.name }}">{{ role.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-md-6 d-flex align-items-end">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="portal_enabled_pending_{{ student.id }}" name="portal_enabled" checked>
+                      <label class="form-check-label small" for="portal_enabled_pending_{{ student.id }}">Liberar portal após aprovação</label>
+                    </div>
+                  </div>
+                  <div class="col-12 d-flex justify-content-end gap-2">
+                    <button class="btn btn-sm btn-outline-danger" name="status" value="rejected" type="submit" formaction="{{ url_for('update_student', student_id=student.id) }}">Rejeitar</button>
+                    <button class="btn btn-sm btn-success" type="submit">Aprovar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
       <div class="card shadow-sm">
         <div class="card-body">
           <h2 class="h5">Participantes cadastrados</h2>
           <div class="d-flex flex-wrap gap-3">
-            {% for student in students %}
+            {% for student in approved_students %}
             <div class="card participant-card flex-grow-1">
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start">
-                  <div>
+                  <div class="d-flex gap-3">
+                    {% if student.photo %}
+                      <img src="{{ url_for('employee_photo', filename=student.photo) }}" alt="Foto" class="rounded" style="width:64px; height:64px; object-fit:cover;">
+                    {% endif %}
+                    <div>
                     <h3 class="h6 mb-1">{{ student.name }}</h3>
                     <p class="mb-1 text-muted">{{ student.role or 'Função não informada' }}</p>
                     <p class="mb-1 small">{{ student.contact }}</p>
+                    </div>
                   </div>
-                  <span class="badge {% if student.portal_enabled %}bg-success{% else %}bg-secondary{% endif %}">
-                    {% if student.portal_enabled %}Portal liberado{% else %}Portal bloqueado{% endif %}
-                  </span>
+                  <div class="text-end">
+                    <span class="badge {% if student.portal_enabled %}bg-success{% else %}bg-secondary{% endif %}">
+                      {% if student.portal_enabled %}Portal liberado{% else %}Portal bloqueado{% endif %}
+                    </span>
+                    <div class="small text-muted">Status: {{ student.status }}</div>
+                  </div>
                 </div>
                 <p class="mt-2 small">{{ student.notes or 'Sem observações' }}</p>
-                <div class="d-flex gap-2">
+                <p class="small mb-2">Departamento: {{ departments|selectattr('id', 'equalto', student.department_id)|map(attribute='name')|first or 'Sem vínculo' }}</p>
+                <div class="d-flex flex-wrap gap-2">
                   <form method="post" action="{{ url_for('toggle_student', student_id=student.id) }}">
                     <button class="btn btn-sm btn-outline-primary" type="submit">
                       {% if student.portal_enabled %}Bloquear{% else %}Liberar{% endif %}
                     </button>
                   </form>
-                  <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">Imprimir ficha</button>
+                  <form method="post" action="{{ url_for('delete_student', student_id=student.id) }}" onsubmit="return confirm('Remover este funcionário?');">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                  </form>
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('print_student', student_id=student.id) }}" target="_blank">Imprimir ficha</a>
                 </div>
+                <details class="mt-3">
+                  <summary class="small">Editar ficha e portal</summary>
+                  <form class="mt-2" method="post" action="{{ url_for('update_student', student_id=student.id) }}">
+                    <div class="row g-2">
+                      <div class="col-md-6">
+                        <label class="form-label small" for="name_{{ student.id }}">Nome</label>
+                        <input class="form-control form-control-sm" id="name_{{ student.id }}" name="name" value="{{ student.name }}">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small" for="role_{{ student.id }}">Função</label>
+                        <input class="form-control form-control-sm" id="role_{{ student.id }}" name="role" value="{{ student.role }}">
+                      </div>
+                    </div>
+                    <div class="row g-2 mt-1">
+                      <div class="col-md-6">
+                        <label class="form-label small" for="contact_{{ student.id }}">Contato</label>
+                        <input class="form-control form-control-sm" id="contact_{{ student.id }}" name="contact" value="{{ student.contact }}">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label small" for="dept_{{ student.id }}">Departamento</label>
+                        <select class="form-select form-select-sm" id="dept_{{ student.id }}" name="department_id">
+                          <option value="" {% if not student.department_id %}selected{% endif %}>Sem vínculo</option>
+                          {% for department in departments %}
+                            <option value="{{ department.id }}" {% if department.id == student.department_id %}selected{% endif %}>{{ department.name }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                    </div>
+                    <div class="mt-2">
+                      <label class="form-label small" for="notes_{{ student.id }}">Observações</label>
+                      <textarea class="form-control form-control-sm" id="notes_{{ student.id }}" name="notes" rows="2">{{ student.notes }}</textarea>
+                    </div>
+                    <div class="mt-2">
+                      <label class="form-label small" for="status_{{ student.id }}">Situação</label>
+                      <select class="form-select form-select-sm" id="status_{{ student.id }}" name="status">
+                        <option value="approved" {% if student.status == 'approved' %}selected{% endif %}>Aprovado</option>
+                        <option value="pending" {% if student.status == 'pending' %}selected{% endif %}>Pendente</option>
+                        <option value="rejected" {% if student.status == 'rejected' %}selected{% endif %}>Rejeitado</option>
+                      </select>
+                    </div>
+                    <div class="form-check mt-2">
+                      <input class="form-check-input" type="checkbox" id="portal_enabled_{{ student.id }}" name="portal_enabled" {% if student.portal_enabled %}checked{% endif %}>
+                      <label class="form-check-label small" for="portal_enabled_{{ student.id }}">Portal liberado</label>
+                    </div>
+                    <div class="row g-2 mt-1">
+                      <div class="col-md-4">
+                        <label class="form-label small" for="portal_username_{{ student.id }}">Usuário</label>
+                        <input class="form-control form-control-sm" id="portal_username_{{ student.id }}" name="portal_username" value="{{ users|selectattr('id', 'equalto', student.user_id)|map(attribute='username')|first }}">
+                      </div>
+                      <div class="col-md-4">
+                        <label class="form-label small" for="portal_password_{{ student.id }}">Nova senha</label>
+                        <input class="form-control form-control-sm" type="password" id="portal_password_{{ student.id }}" name="portal_password" placeholder="Opcional">
+                      </div>
+                      <div class="col-md-4">
+                        <label class="form-label small" for="portal_role_{{ student.id }}">Permissão</label>
+                        <select class="form-select form-select-sm" id="portal_role_{{ student.id }}" name="portal_role">
+                          {% set current_role = users|selectattr('id', 'equalto', student.user_id)|map(attribute='role')|first or 'Colaborador' %}
+                          {% for role in roles %}
+                            <option value="{{ role.name }}" {% if role.name == current_role %}selected{% endif %}>{{ role.name }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                    </div>
+                    <div class="mt-2 d-flex justify-content-end">
+                      <button class="btn btn-sm btn-primary" type="submit">Salvar alterações</button>
+                    </div>
+                  </form>
+                </details>
               </div>
             </div>
             {% else %}
-            <p class="text-muted">Nenhum participante cadastrado ainda.</p>
+            <p class="text-muted">Nenhum participante aprovado ainda.</p>
             {% endfor %}
+            {% if approved_students %}
+              <div class="mt-3">
+                <a class="btn btn-outline-secondary" target="_blank" href="{{ url_for('print_all_students') }}">Imprimir todos</a>
+              </div>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -160,6 +400,9 @@
                     <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_journal', filename=journal.file) }}">PDF</a>
                   {% endif %}
                   <span class="badge bg-secondary ms-2">Criado em {{ journal.created_at[:10] }}</span>
+                  <form class="mt-2" method="post" action="{{ url_for('delete_journal', journal_id=journal.id) }}" onsubmit="return confirm('Excluir este jornal?');">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                  </form>
                 </div>
               </div>
             </div>
@@ -217,7 +460,12 @@
                 <div class="small text-muted">{{ asset.uploaded_at[:10] }} · {{ asset.notes or 'Sem notas' }}</div>
                 <div class="small">Departamento: {{ (departments | selectattr('id','equalto', asset.department_id) | first).name if asset.department_id else '—' }}</div>
               </div>
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_asset', filename=asset.stored_name) }}">Baixar</a>
+              <div class="d-flex flex-column gap-2 align-items-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_asset', filename=asset.stored_name) }}">Baixar</a>
+                <form method="post" action="{{ url_for('delete_asset', asset_id=asset.id) }}" onsubmit="return confirm('Remover este arquivo?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                </form>
+              </div>
             </div>
             {% else %}
             <p class="text-muted">Nenhum arquivo departamental.</p>
@@ -236,7 +484,12 @@
                 <div class="small text-muted">{{ asset.uploaded_at[:10] }}</div>
                 <div class="small">{{ asset.notes }}</div>
               </div>
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_asset', filename=asset.stored_name) }}">Baixar</a>
+              <div class="d-flex flex-column gap-2 align-items-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('download_asset', filename=asset.stored_name) }}">Baixar</a>
+                <form method="post" action="{{ url_for('delete_asset', asset_id=asset.id) }}" onsubmit="return confirm('Remover este arquivo?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                </form>
+              </div>
             </div>
             {% else %}
             <p class="text-muted">Nenhum arquivo enviado.</p>
@@ -391,6 +644,9 @@
                   <div class="small text-muted">{{ event.date }}</div>
                   <div class="small">{{ event.description }}</div>
                 </div>
+                <form method="post" action="{{ url_for('delete_calendar_event', event_id=event.id) }}" onsubmit="return confirm('Excluir este evento?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                </form>
               </div>
             </li>
             {% else %}
@@ -411,6 +667,9 @@
                   <div class="small text-muted">{{ event.date }} · {{ (departments | selectattr('id','equalto', event.department_id) | first).name if event.department_id else 'Sem dept.' }}</div>
                   <div class="small">{{ event.description }}</div>
                 </div>
+                <form method="post" action="{{ url_for('delete_calendar_event', event_id=event.id) }}" onsubmit="return confirm('Excluir este evento?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Excluir</button>
+                </form>
               </div>
             </li>
             {% else %}
@@ -655,7 +914,12 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
           <h2 class="h5">Configurações visuais</h2>
-          <form method="post" action="{{ url_for('update_settings') }}">
+          <form method="post" action="{{ url_for('update_settings') }}" enctype="multipart/form-data">
+            <div class="mb-3">
+              <label class="form-label" for="logo_file">Logo (upload)</label>
+              <input class="form-control" type="file" id="logo_file" name="logo_file" accept="image/*">
+              <p class="form-text">Imagens PNG ou JPG. Você também pode informar um URL opcional abaixo.</p>
+            </div>
             <div class="mb-3">
               <label class="form-label" for="logo_url">Logo (URL)</label>
               <input class="form-control" id="logo_url" name="logo_url" value="{{ site_settings.logo_url }}" placeholder="https://...">
@@ -708,6 +972,44 @@
                   <button class="btn btn-sm btn-outline-secondary" type="submit">{{ user.portal_enabled and 'Bloquear' or 'Liberar' }}</button>
                 </form>
               </div>
+              <details class="mt-2">
+                <summary class="small">Editar login e senha</summary>
+                <form class="mt-2 d-grid gap-2" method="post" action="{{ url_for('update_user', user_id=user.id) }}">
+                  <div class="row g-2">
+                    <div class="col-md-6">
+                      <label class="form-label small" for="user_name_{{ user.id }}">Nome</label>
+                      <input class="form-control form-control-sm" id="user_name_{{ user.id }}" name="name" value="{{ user.name }}">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small" for="user_username_{{ user.id }}">Usuário</label>
+                      <input class="form-control form-control-sm" id="user_username_{{ user.id }}" name="username" value="{{ user.username }}">
+                    </div>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-md-6">
+                      <label class="form-label small" for="user_role_{{ user.id }}">Cargo</label>
+                      <select class="form-select form-select-sm" id="user_role_{{ user.id }}" name="role">
+                        {% for role in roles %}
+                          <option value="{{ role.name }}" {% if role.name == user.role %}selected{% endif %}>{{ role.name }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small" for="user_password_{{ user.id }}">Nova senha</label>
+                      <input class="form-control form-control-sm" type="password" id="user_password_{{ user.id }}" name="password" placeholder="Opcional">
+                    </div>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="portal_enabled_user_{{ user.id }}" name="portal_enabled" {% if user.portal_enabled %}checked{% endif %}>
+                    <label class="form-check-label small" for="portal_enabled_user_{{ user.id }}">Portal liberado</label>
+                  </div>
+                  <div class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-sm btn-primary" type="submit">Salvar</button>
+                    <a class="btn btn-sm btn-outline-danger" href="#" onclick="if(confirm('Remover este usuário?')) { document.getElementById('delete-user-{{ user.id }}').submit(); } return false;">Excluir</a>
+                  </div>
+                </form>
+                <form id="delete-user-{{ user.id }}" method="post" action="{{ url_for('delete_user', user_id=user.id) }}"></form>
+              </details>
             </div>
             {% else %}
             <p class="text-muted mb-0">Nenhum usuário cadastrado ainda.</p>
