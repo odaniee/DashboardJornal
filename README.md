@@ -15,6 +15,7 @@ Portal web simples para organizar fichas de participantes, submissão de jornais
    - `host`: host exposto (por exemplo, `localhost`)
    - `port`: porta onde o Flask deve iniciar
    - `admin_users`: lista de usuários e senhas de administradores
+   - `ssl_certificate` e `ssl_key`: caminhos para o certificado e a chave privada caso você já tenha um par válido
 
 3. Execute a aplicação:
 
@@ -23,6 +24,22 @@ python app.py
 ```
 
 A aplicação inicia na porta definida em `config.json` e salva uploads nas pastas `uploads/journals` e `uploads/assets`.
+
+## Adicionando seu certificado SSL
+
+1. Coloque seus arquivos de certificado e chave em uma pasta local (por exemplo `certs/`). Os arquivos reais são ignorados pelo git.
+2. Atualize o `config.json` para apontar para esses caminhos quando `protocol` estiver como `https`:
+
+```json
+{
+  "protocol": "https",
+  "ssl_certificate": "certs/seu_certificado.pem",
+  "ssl_key": "certs/sua_chave.key",
+  ...
+}
+```
+
+3. Inicie a aplicação normalmente (`python app.py`). Se os caminhos existirem, o Flask usará seu certificado; se estiverem vazios ou inválidos, ele gera um certificado temporário apenas para testes.
 
 ## Funcionalidades
 
