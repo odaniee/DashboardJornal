@@ -5,3 +5,5 @@ uploads/journals/*
 !uploads/journals/.gitkeep
 uploads/assets/*
 !uploads/assets/.gitkeep
+certs/*
+!certs/.gitkeep
