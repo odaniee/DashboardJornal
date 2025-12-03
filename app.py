@@ -416,18 +416,19 @@ if not departments:
 def public_base_url():
     configured = config.get("public_base_url")
     if configured:
-        return configured.rstrip("/")
+        return {"public_base_url": configured.rstrip("/")}
     proto = config.get("protocol", "http")
     host = config.get("host", "localhost")
     port = config.get("port", 8445)
     default_port = 443 if proto == "https" else 80
     if port == default_port:
-        return f"{proto}://{host}"
-    return f"{proto}://{host}:{port}"
+        return {"public_base_url": f"{proto}://{host}"}
+    return {"public_base_url": f"{proto}://{host}:{port}"}
 
 
+@app.context_processor
 def inject_globals():
-    base_url = public_base_url()
+    base_url = public_base_url().get("public_base_url")
     user = current_user()
     user_permissions = user.get("permissions", []) if user else []
     tabs = [
